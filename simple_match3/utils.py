@@ -1,5 +1,6 @@
 import time
 
+
 class State(object):
     exit_name = "EXIT"
     enter_name = "ENTER"

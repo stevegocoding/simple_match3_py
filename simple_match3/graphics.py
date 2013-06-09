@@ -36,7 +36,7 @@ class SpriteSheetLayer(object):
         self.name = value
 
     @property
-    def order_indxe(self):
+    def order_index(self):
         return self._order_index
 
     @property

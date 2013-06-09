@@ -1,9 +1,21 @@
 import uuid
-import cocos.cocosnode
-from src.framework import graphics, event
+import event
+
+
+class EntityEventListener(object):
+
+    def on_entity_added(self, event_args):
+        pass
+
+    def on_entity_removed(self, event_args):
+        pass
+
+    def on_entity_changed(self, event_args):
+        pass
 
 
 class EntityDefinition(object):
+
     def __init__(self):
         # Definitions is like: {def_name : list of component_cls}
         self.definitions = dict()
@@ -25,15 +37,21 @@ class EntityDefinition(object):
         return entity_rec
 
 
-class EntityRecord(cocos.cocosnode.CocosNode):
+class EntityRecord(object):
 
-    def __init__(self, name, entity_registry):
-        cocos.cocosnode.CocosNode.__init__(self)
+    # Components Types Set
+    _components_classes_set = set()
+
+    def __init__(self, name, entity_registry, id):
 
         self.name = name
 
         # Entity Registry
         self.entity_registry = entity_registry
+
+        self._systems_cls = set()
+
+        self._id = id
 
     @property
     def name(self):
@@ -44,6 +62,16 @@ class EntityRecord(cocos.cocosnode.CocosNode):
         #setattr(self, "name", value);
         self._name = value
 
+    @property
+    def id(self):
+        return self._id
+
+    def get_components_classes_set(self):
+        return EntityRecord._components_classes_set
+
+    def get_systems_classes_set(self):
+        return self._systems_cls
+
     def has_component(self, component):
         if component is not None and self.entity_registry is not None:
             comps_dict = self.entity_registry.get_components(self)
@@ -53,20 +81,6 @@ class EntityRecord(cocos.cocosnode.CocosNode):
 
     def get_component(self, component_cls):
         return self.entity_registry.get_component(self, component_cls)
-
-    def need_sync(self):
-        """
-        The entity is considered out-of-sync when it is not registered
-        in a registry, and/or has no name
-        """
-        return (self.name is None or 
-                self.entity_registry is None or
-                not self.entity_registry.contains(self))
-
-    def synchronize(self):
-        if self.entity_registry is not None:
-            if not self.entity_registry.contains(self):
-                self.entity_registry.enter(self)
 
     def attach_component(self, component):
         if self.entity_registry is not None:
@@ -83,73 +97,28 @@ class EntityRecord(cocos.cocosnode.CocosNode):
 
         return "".join(s_lst)
 
-    def visit(self):
-        self.render()
-        cocos.cocosnode.CocosNode.visit(self)
-
-    def draw(self):
-        pass
-
-    def process(self):
-        print "EntityRecord process()"
-
-    def render(self):
-        renderer = self.entity_registry.get_component(self, graphics.SpriteRenderer)
-        if renderer is not None:
-            print "EntityRecord render()"
-            renderer.update_frame(graphics.GameScene.frame_count())
-            renderer.render_frame()
-
     def on_enter(self):
         pass
-
-
-class Entity(object):
-
-    # Entity Definitions {def_name : list_of_component_classes}
-    _definitions = EntityDefinition()
-
-    @staticmethod
-    def create(name, entity_registry, components):
-        entity_rec = EntityRecord(name, entity_registry)
-
-        entity_rec.synchronize()
-
-        if components is not None:
-            for cp in components:
-                entity_rec.attach_component(cp)
-
-        return entity_rec
-
-    @staticmethod
-    def create_from_def(def_name, name):
-        entity_rec = Entity.create(name, EntityRegistry._active_registry, None)
-        return Entity._definitions.make(def_name, entity_rec)
-
-    @staticmethod
-    def define(def_name, component_classes):
-        Entity._definitions.define(def_name, component_classes)
-
-    @staticmethod
-    def undefine(def_name):
-        Entity._definitions.undefine(def_name)
 
     @staticmethod
     def get_guid():
         return str(uuid.uuid())
+
+    @staticmethod
+    def create(name, entity_registry, components_classes_set=None):
+        entity_rec = EntityRecord(name, entity_registry)
+
+        if components_classes_set is not None:
+            for component_cls in components_classes_set:
+                entity_rec.attach_component(component_cls())
+
+        return entity_rec
 
 
 class EntityRecordStore(object):
     def __init__(self):
         # { entity_record : {component_cls : component} }
         self.records = dict()
-
-        # List of components need to be synced
-        self._desynced_components = list()
-
-        # Dictionary of the triggers and handlers
-        # _triggers is a dictionary like {trigger_predicate : event_handler}
-        self._triggers = dict()
 
         # Handlers
         self.on_entity_entered = None
@@ -213,8 +182,6 @@ class EntityRecordStore(object):
                 if component.owner is None or component.owner != entity_rec:
                     component.owner = entity_rec
 
-                self.prepare_components_for_sync(component)
-
                 component_attached = True
 
         # If this entity is just registered, we fire the on_enter for this entity
@@ -246,17 +213,15 @@ class EntityRecordStore(object):
         if component.owner is not None:
             component.owner = None
 
-        self.prepare_components_for_sync(component)
-
         return comp_removed
 
-    def on_entered(self, sync_event_args):
+    def on_entered(self, entity_event_args):
         if self.on_entity_entered is not None:
-            self.on_entity_entered(sync_event_args)
+            self.on_entity_entered(entity_event_args)
 
-    def on_removed(self, sync_event_args):
+    def on_removed(self, entity_event_args):
         if self.on_entity_removed is not None:
-            self.on_entity_removed(sync_event_args)
+            self.on_entity_removed(entity_event_args)
 
     def get_components(self, entity_rec):
         if entity_rec in self.records:
@@ -271,39 +236,6 @@ class EntityRecordStore(object):
             return components_dict[component_cls]
         return None
 
-    def set_trigger(self, predicate, handler):
-        self._triggers[predicate] = handler
-
-    def clear_trigger(self, predicate):
-        if predicate in self._triggers:
-            del self._triggers
-
-    def prepare_components_for_sync(self, component):
-        """
-        """
-        if component not in self._desynced_components:
-            self._desynced_components.append(component)
-
-    def need_sync(self):
-        """
-        This registry is considered out of sync as soon as there are 
-        components that have not yet been run through triggers
-        """
-        return self._desynced_components is not None and len(self._desynced_components) > 0
-
-    def synchronize(self):
-        if len(self._desynced_components) > 0:
-            for trigger_pred in self._triggers.keys():
-                comps = []
-                for cp in self._desynced_components:
-                    if trigger_pred(cp):
-                        comps.append(cp)
-
-                if len(comps) > 0:
-                    self._triggers[trigger_pred](event.ComponentSyncEventArgs(comps))
-
-            del self._desynced_components[0:len(self._desynced_components)]
-
     def contains(self, entity_rec):
         return entity_rec in self.records
 
@@ -316,3 +248,126 @@ class EntityRegistry(object):
     @staticmethod
     def get_current():
         return EntityRegistry._active_registry
+
+
+class Aspect(object):
+
+    def __init__(self):
+        self._all = set()
+        self._exclude = set()
+
+    @property
+    def all(self):
+        return self._all
+
+    @all.setter
+    def all(self, components_cls):
+        self._all = components_cls
+
+    @property
+    def exclude(self):
+        return self._exclude
+
+    @exclude.setter
+    def exclude(self, components_cls):
+        self._exclude = set(components_cls)
+
+    @staticmethod
+    def create_aspect_for_all(components_cls):
+        aspect = Aspect()
+        aspect.all = set(components_cls)
+        return aspect
+
+    @staticmethod
+    def create_empty():
+        aspect = Aspect()
+        return aspect
+
+
+class EntitySystem(EntityEventListener):
+
+    def __init__(self, aspect):
+        self._aspect = aspect
+        self._all = aspect.all
+        self._exclude = aspect.exclude
+
+        self._active_entities = []
+
+    def begin(self):
+        """
+        Called before processing of entities begins.
+        """
+        pass
+
+    def process(self):
+        if self.check_processing():
+            self.begin()
+            self.process_entities(self._active_entities)
+            self.end()
+
+    def end(self):
+        pass
+
+    def on_entity_added(self, event_args):
+        self.check(event_args.entity_rec)
+
+    def on_entity_removed(self, event_args):
+        self.check(event_args.entity_rec)
+
+    # To be overridden
+    def on_inserted_entity(self, entity):
+        """
+        Called if the system has received a entity it is interested in, e.g. created or a component
+        was added to it.
+        """
+        pass
+
+    # To be overridden
+    def on_removed_entity(self, entity):
+        """
+        Called if a entity was removed from this system, e.g. deleted or had one of it's components
+        removed.
+        """
+        pass
+
+    def check_processing(self):
+        """
+        Return true if the system should be processed, false if not.
+        """
+        pass
+
+    def process_entities(self, entities):
+        """
+        Any implementing entity system must implement this method and the logic
+        to process the given entities of the system.
+        """
+        pass
+
+    def initialize(self):
+        pass
+
+    def insert_entity(self, entity):
+        self._active_entities.append(entity)
+        entity.get_systems_classes_set().add(self.__class__)
+        self.on_inserted_entity(entity)
+
+    def remove_entity(self, entity):
+        self._active_entities.remove(entity)
+        entity.get_systems_classes_set().remove(self.__class__)
+        self.on_removed_entity(entity)
+
+    def check(self, entity_rec):
+        """
+        Will check if the entity is of interest to this system.
+        """
+        system_cls = self.__class__
+        contains = system_cls in entity_rec.systems_classes
+        interested = True
+
+        if len(self._all) > 0 and self._all > entity_rec.get_components_classes_set():
+            interested = False
+
+        if interested and not contains:
+            self.insert_entity(entity_rec)
+        elif not interested and contains:
+            self.remove_entity(entity_rec)
