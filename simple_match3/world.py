@@ -18,7 +18,9 @@ class EntityWorld(object):
         self._added_entities = list()
         self._removed_entities = list()
 
+        # {system_class : system_object}
         self._systems = {}
+        # {manager_class : manager_class}
         self._managers = {}
 
     def add_entity(self, entity):
@@ -28,11 +30,11 @@ class EntityWorld(object):
         self._removed_entities.append(entity)
 
     def add_system(self, system):
-        system_class = system.__class__
+        system_class = type(system)
         self._systems[system_class] = system
 
     def add_manager(self, manager):
-        manager_class = manager.__class__
+        manager_class = type(manager)
         self._managers[manager_class] = manager
 
     def get_system_by_type(self, system_class):

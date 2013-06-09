@@ -348,19 +348,19 @@ class EntitySystem(EntityEventListener):
 
     def insert_entity(self, entity):
         self._active_entities.append(entity)
-        entity.get_systems_classes_set().add(self.__class__)
+        entity.get_systems_classes_set().add(type(self))
         self.on_inserted_entity(entity)
 
     def remove_entity(self, entity):
         self._active_entities.remove(entity)
-        entity.get_systems_classes_set().remove(self.__class__)
+        entity.get_systems_classes_set().remove(type(self))
         self.on_removed_entity(entity)
 
     def check(self, entity_rec):
         """
         Will check if the entity is of interest to this system.
         """
-        system_cls = self.__class__
+        system_cls = type(self)
         contains = system_cls in entity_rec.systems_classes
         interested = True
 
