@@ -14,43 +14,21 @@ class EntityEventListener(object):
         pass
 
 
-class EntityDefinition(object):
-
-    def __init__(self):
-        # Definitions is like: {def_name : list of component_cls}
-        self.definitions = dict()
-
-    def define(self, def_name, component_cls_lst):
-        if def_name is not None and component_cls_lst is not None:
-            self.definitions[def_name] = component_cls_lst
-
-    def undefine(self, def_name):
-        if def_name in self.definitions:
-            del self.definitions[def_name]
-
-    def make(self, def_name, entity_rec):
-        if def_name in self.definitions:
-            component_cls_lst = self.definitions[def_name]
-            for component_cls in component_cls_lst:
-                    entity_rec.attach_component(component_cls())
-            return entity_rec
-        return entity_rec
-
-
 class EntityRecord(object):
 
     # Components Types Set
     _components_classes_set = set()
 
-    def __init__(self, name, entity_registry, id):
+    def __init__(self, world, id, name="unnamed_entity"):
 
         self.name = name
 
         # Entity Registry
-        self.entity_registry = entity_registry
+        self.entity_registry = EntityRegistry.get_current()
 
         self._systems_cls = set()
 
+        self._world = world
         self._id = id
 
     @property
@@ -97,8 +75,12 @@ class EntityRecord(object):
 
         return "".join(s_lst)
 
-    def on_enter(self):
-        pass
+    def add_to_world(self):
+        self._world.add_entity(self)
+
+    def remove_from_world(self):
+        self._world.remove_entity(self)
+
 
     @staticmethod
     def get_guid():
