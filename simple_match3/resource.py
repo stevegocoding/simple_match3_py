@@ -122,6 +122,11 @@ GFX_TAG_NAME = "gfx"
 SOUND_TAG_NAME = "sound"
 FONT_TAG_NAME = "font"
 
+GFX_PATH_PREFIX = "gfx"
+SOUND_PATH_PREFIX = "sound"
+FONT_PATH_PREFIX = "font"
+MAP_PATH_PREFIX = "map"
+
 
 class GameAssetArchiveLoader(pyglet.resource.Loader):
     """
@@ -130,23 +135,29 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
     All the other level data is loaded in a lazy fashion.
     """
 
-    def __init__(self, path=None, script_home=None, header_name="header.xml"):
+    def __init__(self, path=None, script_home=None, header_prefix="assets", header_name="header.xml"):
         pyglet.resource.Loader.__init__(self, path, script_home)
 
         self._levels = {}
-        self.load_header_xml(header_name)
+
+        self._assets_path_prefix = header_prefix
+        header_path = "/".join([header_prefix, header_name])
+        self.load_header_xml(header_path)
+
+    def get_resource_path(self, prefix, name):
+        res_path = "/".join([self._assets_path_prefix, prefix, name])
+        return res_path
 
     def load_header_xml(self, name):
         header_file = self.file(name)
         self.parse_header(header_file)
 
     def parse_header(self, header_file):
-        with open(header_file, "r") as file_handle:
-            tree = ElementTree.parse(file_handle)
-            root = tree.getroot()
-            if root.tag == ROOT_TAG_NAME:
-                for child in root.findall(LEVEL_TAG_NAME):
-                    self.parse_level_element(child)
+        tree = ElementTree.parse(header_file)
+        root = tree.getroot()
+        if root.tag == ROOT_TAG_NAME:
+            for child in root.findall(LEVEL_TAG_NAME):
+                self.parse_level_element(child)
 
     def parse_level_element(self, level_elem):
         gfx_resources = {}
@@ -185,7 +196,7 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
 
             # Load all the graphics resources in this level
             for gfx_name in level.gfx_resources:
-                file_handle = self.file(gfx_name)
+                file_handle = self.file(self.get_resource_path(GFX_PATH_PREFIX, gfx_name))
                 if level.gfx_resources[gfx_name]["type"] == "spritesheet":
                     res = self.load_spritesheet_resource(file_handle, gfx_name)
                     ResourceManagerSingleton.instance().register_spritesheet(res)
@@ -208,7 +219,8 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
         spritesheet_res = SpriteSheetResource(name)
 
         # Load the spritesheet image as a texture
-        atlas_texture = self.texture(image_atlas_elem.get("file"))
+        texture_path = self.get_resource_path(GFX_PATH_PREFIX, image_atlas_elem.get("file"))
+        atlas_texture = self.texture(texture_path)
         atlas_width, atlas_height = map(int, image_atlas_elem.get('size').split('x'))
 
         for child in image_atlas_elem.findall("image"):

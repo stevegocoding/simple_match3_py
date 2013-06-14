@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<Resource>
+    <imageatlas file="rotating_crystals.png" size="256x160">
+        <image id="crystal_blue_00" offset="0,0" size="32x32"/>
+        <image id="crystal_blue_01" offset="32,0" size="32x32"/>
+        <image id="crystal_blue_02" offset="64,0" size="32x32"/>
+        <image id="crystal_blue_03" offset="96,0" size="32x32"/>
+        <image id="crystal_blue_04" offset="128,0" size="32x32"/>
+        <image id="crystal_blue_05" offset="160,0" size="32x32"/>
+        <image id="crystal_blue_06" offset="192,0" size="32x32"/>
+        <image id="crystal_blue_07" offset="224,0" size="32x32"/>
+    </imageatlas>
+    <animation>
+        <sequence name="crystal_blue">
+            <frame id="crystal_blue_00"/>
+            <frame id="crystal_blue_01"/>
+            <frame id="crystal_blue_02"/>
+            <frame id="crystal_blue_03"/>
+            <frame id="crystal_blue_04"/>
+            <frame id="crystal_blue_05"/>
+            <frame id="crystal_blue_06"/>
+            <frame id="crystal_blue_07"/>
+        </sequence>
+    </animation>
+</Resource>

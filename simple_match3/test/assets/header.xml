@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<GameAssetArchive>
+    <level name="test_level">
+        <gfx name="rotating_crystals.xml" type="spritesheet"/>
+
+    </level>
+</GameAssetArchive>
