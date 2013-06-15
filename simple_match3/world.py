@@ -55,11 +55,19 @@ class EntityWorld(object):
             for entity in entities:
                 self.fire_entity_event(entity, action)
 
-    def process(self):
+    def begin(self):
         self.check(self._added_entities, notify_add_entity)
-
         self.check(self._removed_entities, notify_remove_entity)
 
+    def render(self):
+        # Process all the systems
+        for system in self._systems.values():
+            system.render()
+
+    def process(self):
         # Process all the systems
         for system in self._systems.values():
             system.process()
+
+    def end(self):
+        pass

@@ -11,6 +11,9 @@
         <image id="crystal_blue_07" offset="224,0" size="32x32"/>
     </imageatlas>
     <animation>
+        <sequence name="default">
+            <frame id="crystal_blue_00"/>
+        </sequence>
         <sequence name="crystal_blue">
             <frame id="crystal_blue_00"/>
             <frame id="crystal_blue_01"/>

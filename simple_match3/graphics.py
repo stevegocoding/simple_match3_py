@@ -6,43 +6,6 @@ import cocos.sprite
 
 import utils
 
-class SpriteSheetLayer(object):
-
-    def __init__(self, renderer, resource, order_idx):
-        self._name = "default_layer"
-        self._renderer = renderer
-        self._sprite_sheet = resource
-        self._order_index = order_idx
-        self._is_hidden = False
-
-    def get_frames_count(self, state):
-        if self._sprite_sheet is not None:
-            return self._sprite_sheet.get_frames_count(state)
-        else:
-            return 0
-
-    def get_frame_image(self, state, frame):
-        if self._sprite_sheet is not None:
-            frame_img = self._sprite_sheet.get_frame_image(state, frame)
-            return frame_img
-        else:
-            return None
-
-    @property
-    def name(self):
-        return self._name
-    @name.setter
-    def name(self, value):
-        self.name = value
-
-    @property
-    def order_index(self):
-        return self._order_index
-
-    @property
-    def is_hidden(self):
-        return self._is_hidden
-
 
 class GameScene(cocos.scene.Scene):
 

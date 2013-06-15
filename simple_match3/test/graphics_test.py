@@ -6,6 +6,7 @@ import cocos.scene
 import cocos.batch
 import cocos.sprite
 
+import pyglet.gl as gl
 import pyglet.resource
 
 from simple_match3.resource import GameAssetArchiveLoader
@@ -14,47 +15,10 @@ from simple_match3.entity import Aspect
 from simple_match3.entity import EntitySystem
 from simple_match3.world import EntityWorld
 from simple_match3.managers import EntityManager
+from simple_match3.utils import FPSSync
 
 from entity_factory import PositionComponent
 from entity_factory import SpriteRenderComponent
-
-
-class SpriteSheetLayer(object):
-
-    def __init__(self, renderer, resource, order_idx):
-        self._name = "default_layer"
-        self._renderer = renderer
-        self._sprite_sheet = resource
-        self._order_index = order_idx
-        self._is_hidden = False
-
-    def get_frames_count(self, state):
-        if self._sprite_sheet is not None:
-            return self._sprite_sheet.get_frames_count(state)
-        else:
-            return 0
-
-    def get_frame_image(self, state, frame):
-        if self._sprite_sheet is not None:
-            frame_img = self._sprite_sheet.get_frame_image(state, frame)
-            return frame_img
-        else:
-            return None
-
-    @property
-    def name(self):
-        return self._name
-    @name.setter
-    def name(self, value):
-        self.name = value
-
-    @property
-    def order_index(self):
-        return self._order_index
-
-    @property
-    def is_hidden(self):
-        return self._is_hidden
 
 
 class RenderSystem(EntitySystem):
@@ -72,6 +36,9 @@ class RenderSystem(EntitySystem):
         render_component.update_frame(1)
         render_component.render_frame()
 
+    def check_processing(self):
+        return True
+
     def process_entities(self, entities):
         for entity in entities:
             self.render_entity(entity)
@@ -83,6 +50,7 @@ class GraphicsTestLayer(cocos.layer.Layer):
         super(GraphicsTestLayer, self).__init__()
 
         self._world = world
+        self._counter = 0
 
     def on_enter(self):
         pass
@@ -90,12 +58,53 @@ class GraphicsTestLayer(cocos.layer.Layer):
     def on_exit(self):
         pass
 
-    def visit(self):
-        pass
-
     def draw(self):
-        pass
 
+        self._counter += 1
+        print "GraphicsTestLayer - draw() %d" % self._counter
+
+        gl.glPushMatrix()
+
+        self.transform()
+
+        self._world.begin()
+        self._world.process()
+        self._world.end()
+
+        gl.glPopMatrix()
+
+
+class GameScene(cocos.scene.Scene):
+
+    fps_sync = FPSSync(60)
+
+    def __init__(self):
+        cocos.scene.Scene.__init__(self)
+        GameScene.fps_sync.start()
+        self.schedule(self.update_tick_counter)
+
+    def update_tick_counter(self, dt):
+        print "dt: %f" % dt
+        GameScene.fps_sync.update(dt)
+
+    def visit(self):
+        """
+        ticks = GameScene.fps_sync.get_frame_count()
+
+        if ticks > 0:
+            process_count = 0
+            while process_count < ticks:
+                # cocos.scene.Scene.visit(self)
+                process_count += 1
+        """
+
+        cocos.scene.Scene.visit(self)
+
+    
+
+    @staticmethod
+    def frame_count():
+        return GameScene.fps_sync.get_frame_count()
 
 from entity_factory import EntityFactory
 
@@ -135,6 +144,10 @@ if __name__ == "__main__":
     world = create_game_world()
 
     cocos.director.director.init(**consts["window"])
-    scene = cocos.scene.Scene()
+    scene = GameScene()
+    #scene = cocos.scene.Scene()
     scene.add(GraphicsTestLayer(world), z=0)
+
+    cocos.director.event_loop._polling = True
+
     cocos.director.director.run(scene)

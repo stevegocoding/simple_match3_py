@@ -16,9 +16,6 @@ class EntityEventListener(object):
 
 class EntityRecord(object):
 
-    # Components Types Set
-    _components_classes_set = set()
-
     def __init__(self, world, id, name="unnamed_entity"):
 
         self.name = name
@@ -26,7 +23,11 @@ class EntityRecord(object):
         # Entity Registry
         self.entity_registry = EntityRegistry.get_current()
 
+        # System sets
         self._systems_cls = set()
+
+        # Components Types Set
+        self._components_classes_set = set()
 
         self._world = world
         self._id = id
@@ -45,7 +46,7 @@ class EntityRecord(object):
         return self._id
 
     def get_components_classes_set(self):
-        return EntityRecord._components_classes_set
+        return self._components_classes_set
 
     def get_systems_classes_set(self):
         return self._systems_cls
@@ -160,6 +161,7 @@ class EntityRecordStore(object):
             cp_cls = type(component)
             if cp_cls not in comps_dict:
                 comps_dict[cp_cls] = component
+                entity_rec.get_components_classes_set().add(cp_cls)
 
                 if component.owner is None or component.owner != entity_rec:
                     component.owner = entity_rec
@@ -190,6 +192,7 @@ class EntityRecordStore(object):
 
             if comp_cls in comps_dict:
                 del comps_dict[comp_cls]
+                entity_rec.get_components_classes_set().remove(comp_cls)
                 comp_removed = True
         
         if component.owner is not None:
@@ -281,6 +284,9 @@ class EntitySystem(EntityEventListener):
         """
         pass
 
+    def render(self):
+        pass
+
     def process(self):
         if self.check_processing():
             self.begin()
@@ -343,7 +349,7 @@ class EntitySystem(EntityEventListener):
         Will check if the entity is of interest to this system.
         """
         system_cls = type(self)
-        contains = system_cls in entity_rec.systems_classes
+        contains = system_cls in entity_rec.get_systems_classes_set()
         interested = True
 
         if len(self._all) > 0 and self._all > entity_rec.get_components_classes_set():

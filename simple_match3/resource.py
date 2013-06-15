@@ -85,6 +85,16 @@ class SpriteSheetResource(Resource):
     def add_animation_sequence(self, seq_name, frames):
         self._animations[seq_name] = frames
 
+    def get_frames_count(self, state):
+        if state in self._animations:
+            return len(self._animations[state])
+
+    def get_frame_image(self, state, frame):
+        if state in self._animations and frame < len(self._animations[state]):
+            image = self._images[self._animations[state][frame]]
+            return image
+        return None
+
 
 class ResourceManager(object):
 

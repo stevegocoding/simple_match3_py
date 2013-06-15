@@ -1,11 +1,63 @@
 __author__ = 'magkbdev'
 
+import cocos.sprite
+
+from pyglet.sprite import Sprite
 
 from simple_match3.managers import EntityManager
 from simple_match3.entity import EntityRecord
 from simple_match3.component import Component
 from simple_match3.resource import ResourceManagerSingleton
-from simple_match3.graphics import SpriteSheetLayer
+
+
+class SpriteSheetLayer(object):
+
+    def __init__(self, renderer, resource, order_idx):
+        self._name = "default_layer"
+        self._renderer = renderer
+        self._sprite_sheet = resource
+        self._order_index = order_idx
+        self._is_hidden = False
+
+        image = self.get_frame_image(self._renderer.current_state, self._renderer.current_frame)
+        self._sprite = Sprite(image)
+
+    def get_frames_count(self, state):
+        if self._sprite_sheet is not None:
+            return self._sprite_sheet.get_frames_count(state)
+        else:
+            return 0
+
+    def get_frame_image(self, state, frame):
+        if self._sprite_sheet is not None:
+            frame_img = self._sprite_sheet.get_frame_image(state, frame)
+            return frame_img
+        else:
+            return None
+
+    def draw(self):
+        image = self.get_frame_image(self._renderer.current_state, self._renderer.current_frame)
+        pos = self._renderer.position
+
+        if image is not None:
+            self._sprite._set_image(image)
+            self._sprite.position = pos
+            self._sprite.draw()
+
+    @property
+    def name(self):
+        return self._name
+    @name.setter
+    def name(self, value):
+        self.name = value
+
+    @property
+    def order_index(self):
+        return self._order_index
+
+    @property
+    def is_hidden(self):
+        return self._is_hidden
 
 
 class SpriteRenderComponent(Component):
@@ -16,7 +68,6 @@ class SpriteRenderComponent(Component):
         self._current_state = "default"
         self._frame_index = 0
         self._max_frames = 0
-        self._sprites = []
         self._layers = []
         self._layers_render = []
         self._loop = True
@@ -59,16 +110,14 @@ class SpriteRenderComponent(Component):
         # Build the array of images to draw in current state
         for layer in self._layers:
             if layer.is_hidden is not True:
-                frame_img = layer.get_frame_image(self.current_state, self.current_frame)
-                if frame_img is not None:
-                    self._layers_render.append(layer)
-                    sprite = cocos.sprite.Sprite(frame_img)
-                    sprite.position = self._position
-                    self._sprites.append(sprite)
+                self._layers_render.append(layer)
 
     def render_frame(self):
-        for sprite in self._sprites:
-            sprite.draw()
+        for layer in self._layers_render:
+            layer.draw()
+
+        # clear the list of the layers to render
+        self._layers_render = []
 
     def sort_layers(self):
         if len(self._layers) > 1:
@@ -138,6 +187,8 @@ class EntityFactory(object):
 
         sprite_component = SpriteRenderComponent()
         sprite_resource = ResourceManagerSingleton.instance().find_resource("rotating_crystals")
+
+        sprite_component.current_state = "crystal_blue"
         sprite_component.create_layer(sprite_resource, 0)
         entity.attach_component(sprite_component)
 
