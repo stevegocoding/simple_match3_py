@@ -3,5 +3,6 @@
     <level name="test_level">
         <gfx name="rotating_crystals" type="spritesheet"/>
 
+        <map name="board_blocks.json" type="json"/>
     </level>
 </GameAssetArchive>

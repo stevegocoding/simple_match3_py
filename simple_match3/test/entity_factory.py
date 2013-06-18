@@ -1,8 +1,7 @@
 __author__ = 'magkbdev'
 
-import cocos.sprite
-
 from pyglet.sprite import Sprite
+from pyglet.graphics import Batch
 
 from simple_match3.managers import EntityManager
 from simple_match3.entity import EntityRecord
@@ -174,6 +173,88 @@ class PositionComponent(Component):
         return 100, 100
 
 
+class BoardTilePositionComponent(Component):
+
+    def __init__(self, origin_pos, cell_width, cell_height, num_cols, num_rows):
+        Component.__init__(self)
+
+        self._origin_x = origin_pos[0]
+        self._origin_y = origin_pos[1]
+        self._num_cols = num_cols
+        self._num_rows = num_rows
+        self._cell_width = cell_width
+        self._cell_height = cell_height
+
+    def get_render_position(self, x, y):
+        pos_x = 0
+        pos_y = 0
+        if x < self._num_cols and y < self._num_rows:
+            pos_x = self._origin_x + x * self._cell_width
+            pos_y = self._origin_y + y * self._cell_height
+
+        return pos_x, pos_y
+
+    @property
+    def origin_position(self):
+        return self._origin_x, self._origin_y
+
+    @origin_position.setter
+    def origin_position(self, val):
+        self._origin_x = val[0]
+        self._origin_y = val[1]
+
+
+class BoardRenderComponent(Component):
+
+    def __init__(self, board_layout_res):
+        Component.__init__(self)
+
+        self._board_res = board_layout_res
+        self._tiles_batch = None
+
+        self._board_position = 0, 0
+
+        self._tiles_sprites = []
+
+    def reset_tiles_batch(self):
+        position_component = self.owner.get_component(BoardTilePositionComponent)
+        if position_component:
+            self._tiles_batch = Batch()
+            for layer in self._board_res.layers:
+                for tile in layer.tiles:
+                    tex = self._board_res.get_tile_image(tile)
+                    sprite = Sprite(tex, batch=self._tiles_batch)
+                    self._tiles_sprites.append(sprite)
+        else:
+            raise Exception("There is no BoardTilePositionComponent attached yet")
+
+    def render_to_texture(self):
+        pass
+
+    def render(self):
+        self._tiles_batch.draw()
+
+    def get_tile_xy(self, tile_idx, num_tiles_x, num_tiles_y):
+        if num_tiles_x != 0 and num_tiles_y != 0:
+            tile_y = tile_idx / num_tiles_x
+            tile_x = tile_idx - tile_y * num_tiles_x
+            return tile_x, tile_y
+        return -1, -1
+
+    def update_render_position(self):
+        position_component = self.owner.get_component(BoardTilePositionComponent)
+        if position_component:
+            sprite_idx = 0
+            for layer in self._board_res.layers:
+                for tile_idx in range(len(layer.tiles)):
+                    x, y = self.get_tile_xy(tile_idx, layer.width, layer.height)
+                    sprite = self._tiles_sprites[sprite_idx]
+                    sprite.position = position_component.get_render_position(x, y)
+                    sprite_idx += 1
+        else:
+            raise Exception("There is no BoardTilePositionComponent attached yet")
+
+
 class EntityFactory(object):
     def __init__(self):
         pass
@@ -191,5 +272,31 @@ class EntityFactory(object):
         sprite_component.current_state = "crystal_blue"
         sprite_component.create_layer(sprite_resource, 0)
         entity.attach_component(sprite_component)
+
+        return entity
+
+
+    @staticmethod
+    def create_game_board(world, board_res_name, pos):
+        entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
+
+        board_layout_res = ResourceManagerSingleton.instance().find_resource(board_res_name)
+        board_width = board_layout_res.board_width
+        board_height = board_layout_res.board_height
+        tile_width = board_layout_res.tile_width
+        tile_height = board_layout_res.tile_height
+
+        pos_component = BoardTilePositionComponent(pos,
+                                                   tile_width,
+                                                   tile_height,
+                                                   board_width,
+                                                   board_height)
+        entity.attach_component(pos_component)
+
+        render_component = BoardRenderComponent(board_layout_res)
+        entity.attach_component(render_component)
+
+        render_component.reset_tiles_batch()
+        render_component.update_render_position()
 
         return entity

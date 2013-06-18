@@ -16,31 +16,25 @@ from simple_match3.world import EntityWorld
 from simple_match3.managers import EntityManager
 from simple_match3.utils import FPSSync
 
-from entity_factory import PositionComponent
-from entity_factory import SpriteRenderComponent
+from entity_factory import BoardTilePositionComponent
+from entity_factory import BoardRenderComponent
 
 
-class RenderSystem(EntitySystem):
+class BoardRenderSystem(EntitySystem):
 
     def __init__(self):
+        EntitySystem.__init__(self, Aspect.create_aspect_for_all([BoardTilePositionComponent,
+                                                                  BoardRenderComponent]))
 
-        EntitySystem.__init__(self, Aspect.create_aspect_for_all([PositionComponent,
-                                                                  SpriteRenderComponent]))
+    def render(self):
+        for entity in self._active_entities:
+            self.render_entity(entity)
 
     def render_entity(self, entity):
-        render_component = entity.get_component(SpriteRenderComponent)
-        position_component = entity.get_component(PositionComponent)
+        render_component = entity.get_component(BoardRenderComponent)
+        #position_component = entity.get_component(BoardTilePositionComponent)
 
-        render_component.position = position_component.get_position()
-        render_component.update_frame(1)
-        render_component.render_frame()
-
-    def check_processing(self):
-        return True
-
-    def process_entities(self, entities):
-        for entity in entities:
-            self.render_entity(entity)
+        render_component.render()
 
 
 class GraphicsTestLayer(cocos.layer.Layer):
@@ -67,7 +61,7 @@ class GraphicsTestLayer(cocos.layer.Layer):
         self.transform()
 
         self._world.begin()
-        self._world.process()
+        self._world.render()
         self._world.end()
 
         gl.glPopMatrix()
@@ -109,7 +103,7 @@ from entity_factory import EntityFactory
 
 
 def initialize_system():
-    pyglet.resource.path = ["assets", "assets/gfx", "assets/sound"]
+    pyglet.resource.path = ["assets", "assets/gfx", "assets/sound", "assets/map"]
     pyglet.resource.reindex()
 
     asset_loader = GameAssetArchiveLoader()
@@ -119,10 +113,10 @@ def initialize_system():
 def create_game_world():
     world = EntityWorld()
 
-    world.add_system(RenderSystem())
+    world.add_system(BoardRenderSystem())
     world.add_manager(EntityManager())
 
-    blue_crystal = EntityFactory.create_blue_crystal(world, (50, 50))
+    blue_crystal = EntityFactory.create_game_board(world, "board_blocks.json", (10, 10))
     world.add_entity(blue_crystal)
 
     return world
