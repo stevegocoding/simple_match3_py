@@ -163,7 +163,9 @@ class TiledBoardResource(Resource):
         for i in range(num_tiles):
             tile_y = i / self._num_tiles_x
             tile_x = i - tile_y * self._num_tiles_x
-            tex = self._tileset_image.get_region(tile_x, tile_y, tile_width, tile_height)
+            offset_x = tile_x * tile_width
+            offset_y = self._tileset_image.height - (tile_y+1) * tile_height
+            tex = self._tileset_image.get_region(offset_x, offset_y, tile_width, tile_height)
             self._tiles_images.append(tex)
 
     def add_layer(self, name, width, height, tiles, z):
@@ -199,6 +201,26 @@ class TiledBoardResource(Resource):
         return self._layers
 
 
+class SimpleTextureResource(Resource):
+
+    def __init__(self, name, texture):
+        Resource.__init__(self, name)
+
+        self._texture = texture
+
+    @property
+    def width(self):
+        return self._texture.width
+
+    @property
+    def height(self):
+        return self._texture.height
+
+    @property
+    def texture(self):
+        return self._texture
+
+
 class ResourceManager(object):
 
     def __init__(self):
@@ -210,6 +232,9 @@ class ResourceManager(object):
 
     def register_map(self, map_res):
         self._resources[map_res.name] = map_res
+
+    def register(self, res):
+        self._resources[res.name] = res
 
     def find_resource(self, name):
         if name in self._resources:
@@ -324,6 +349,9 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
                 if level.gfx_resources[gfx_name]["type"] == "spritesheet":
                     res = self.load_spritesheet_resource(file_handle, gfx_name)
                     ResourceManagerSingleton.instance().register_spritesheet(res)
+                elif level.gfx_resources[gfx_name]["type"] == "texture":
+                    res = self.load_simple_texture(file_handle, gfx_name)
+                    ResourceManagerSingleton.instance().register(res)
 
             # Load all the sound resources in this level
             for sound_name in level.sound_resources:
@@ -394,3 +422,14 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
             z_order += 1
 
         return map_res
+
+    def load_simple_texture(self, file_handle, name):
+        res_obj = json.load(file_handle)
+
+        texture_file = res_obj["file"]
+        texture_path = self.get_resource_path(GFX_PATH_PREFIX, texture_file)
+        texture = self.texture(texture_path)
+
+        tex_res = SimpleTextureResource(name, texture)
+
+        return tex_res

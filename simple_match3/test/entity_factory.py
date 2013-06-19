@@ -1,7 +1,14 @@
 __author__ = 'magkbdev'
 
+import pyglet.gl as gl
+import pyglet.graphics
 from pyglet.sprite import Sprite
 from pyglet.graphics import Batch
+
+from gletools import (ShaderProgram, VertexShader, FragmentShader,
+                      Texture, Framebuffer, Sampler2D, Screen)
+
+from gl_utils import TextureContext
 
 from simple_match3.managers import EntityManager
 from simple_match3.entity import EntityRecord
@@ -255,6 +262,86 @@ class BoardRenderComponent(Component):
             raise Exception("There is no BoardTilePositionComponent attached yet")
 
 
+class BackgroundRenderComponent(Component):
+
+    _vertex_list = None
+    _bg_render_vs = VertexShader(
+        """
+        varying vec2 texcoords;
+        void main()
+        {
+            gl_Position = ftransform();
+            texcoords = gl_MultiTexCoord0.st;
+        }
+        """
+    )
+
+    _bg_render_fs = FragmentShader(
+        """
+        varying vec2 texcoords;
+        uniform sampler2D bg_tex;
+
+        void main()
+        {
+            vec4 tex_color = vec4(0.0, 0.0, 0.0, 0.0);
+            tex_color = texture2D(bg_tex, texcoords);
+            gl_FragColor = tex_color;
+            gl_FragColor.w = 1;
+        }
+        """
+    )
+
+    _bg_shader = None
+    _tex_context = None
+    _usage = "dynamic"
+
+    def __init__(self, bg_res, x, y):
+        Component.__init__(self)
+
+        self._bg_res = bg_res
+        self._bg_tex = bg_res.texture
+
+        self._x = x
+        self._y = y
+
+        self._setup_geometry()
+        self._setup_shader_program()
+        self._setup_texture_context(self._bg_tex)
+
+    def __del__(self):
+        if self._vertex_list is not None:
+            self._vertex_list.delete()
+
+    def _setup_geometry(self):
+        self._vertex_list = pyglet.graphics.vertex_list(4,
+                                                        'v2i/%s' % self._usage,
+                                                        'c4b', ('t3f', self._bg_tex.tex_coords))
+        self._update_position()
+
+    def _update_position(self):
+        img = self._bg_tex
+        x1 = int(self._x - img.anchor_x)
+        y1 = int(self._y - img.anchor_y)
+        x2 = x1 + img.width
+        y2 = y1 + img.height
+        self._vertex_list.vertices[:] = [x1, y1, x2, y1, x2, y2, x1, y2]
+
+    def _setup_texture_context(self, pyglet_tex):
+        self._tex_context = TextureContext(pyglet_tex)
+
+    def _setup_shader_program(self):
+        self._bg_shader = ShaderProgram(
+            self._bg_render_vs,
+            self._bg_render_fs,
+        )
+
+        self._bg_shader.vars.bg_tex = Sampler2D(gl.GL_TEXTURE0)
+
+    def render(self):
+        with self._tex_context, self._bg_shader:
+            self._vertex_list.draw(gl.GL_QUADS)
+
+
 class EntityFactory(object):
     def __init__(self):
         pass
@@ -275,6 +362,15 @@ class EntityFactory(object):
 
         return entity
 
+    @staticmethod
+    def create_background(world, background_res_name):
+        entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
+
+        bg_res = ResourceManagerSingleton.instance().find_resource(background_res_name)
+        render_component = BackgroundRenderComponent(bg_res, 0, 0)
+        entity.attach_component(render_component)
+
+        return entity
 
     @staticmethod
     def create_game_board(world, board_res_name, pos):

@@ -18,6 +18,7 @@ from simple_match3.utils import FPSSync
 
 from entity_factory import BoardTilePositionComponent
 from entity_factory import BoardRenderComponent
+from entity_factory import BackgroundRenderComponent
 
 
 class BoardRenderSystem(EntitySystem):
@@ -34,6 +35,20 @@ class BoardRenderSystem(EntitySystem):
         render_component = entity.get_component(BoardRenderComponent)
         #position_component = entity.get_component(BoardTilePositionComponent)
 
+        render_component.render()
+
+
+class BackgroundRenderSystem(EntitySystem):
+
+    def __init__(self):
+        EntitySystem.__init__(self, Aspect.create_aspect_for_all([BackgroundRenderComponent]))
+
+    def render(self):
+        for entity in self._active_entities:
+            self.render_entity(entity)
+
+    def render_entity(self, entity):
+        render_component = entity.get_component(BackgroundRenderComponent)
         render_component.render()
 
 
@@ -93,8 +108,6 @@ class GameScene(cocos.scene.Scene):
 
         cocos.scene.Scene.visit(self)
 
-
-
     @staticmethod
     def frame_count():
         return GameScene.fps_sync.get_frame_count()
@@ -113,11 +126,11 @@ def initialize_system():
 def create_game_world():
     world = EntityWorld()
 
-    world.add_system(BoardRenderSystem())
+    world.add_system(BackgroundRenderSystem())
     world.add_manager(EntityManager())
 
-    blue_crystal = EntityFactory.create_game_board(world, "board_blocks.json", (10, 10))
-    world.add_entity(blue_crystal)
+    bg_entity = EntityFactory.create_background(world, "background.json")
+    world.add_entity(bg_entity)
 
     return world
 
@@ -126,8 +139,8 @@ if __name__ == "__main__":
 
     consts = {
         "window" : {
-            "width": 800,
-            "height": 600,
+            "width": 1024,
+            "height": 768,
             "vsync": True,
             "resizable": True
         }

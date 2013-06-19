@@ -2,7 +2,7 @@
 <GameAssetArchive>
     <level name="test_level">
         <gfx name="rotating_crystals" type="spritesheet"/>
-
+        <gfx name="background.json" type="texture"/>
         <map name="board_blocks.json" type="json"/>
     </level>
 </GameAssetArchive>
