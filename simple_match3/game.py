@@ -1,276 +1,182 @@
 __author__ = 'magkbdev'
 
-import time
+import cocos.director as director
+import cocos.scene as scene
+import cocos.layer as layer
+import cocos.cocosnode as cocosnode
+
+import pyglet.app
 import pyglet.resource
-import cocos.scene
-import cocos.sprite
+import pyglet.gl as gl
 
-import entity
-import component
-import utils
+from world import EntityWorld
+from utils import FPSSync
 
 
-class GameScene(cocos.scene.Scene):
+class EntitySystemNode(cocosnode.CocosNode):
 
-    fps_sync = utils.FPSSync(30)
+    def __init__(self, entity_system):
+        super(EntitySystemNode, self).__init__()
+        self._entity_system = entity_system
+
+    def visit(self):
+        if not self.visible:
+            return
+
+        self._entity_system.process()
+        self._entity_system.render()
+
+    @property
+    def z_index(self):
+        return 0
+
+    @property
+    def name(self):
+        return "default"
+
+
+class GameScene(scene.Scene):
+
+    fps_sync = FPSSync(60)
 
     def __init__(self):
-        cocos.scene.Scene.__init__(self)
+        super(GameScene, self).__init__()
         GameScene.fps_sync.start()
         self.schedule(self.update_tick_counter)
-
-        self.game_entities = []
-
-    def add_game_entity(self, entity):
-        self.game_entities.append(entity)
-
-    def remove_game_entity(self, entity):
-        pass
 
     def update_tick_counter(self, dt):
         print "dt: %f" % dt
         GameScene.fps_sync.update(dt)
 
-    def process_scene(self):
+    def visit(self):
+        """
         ticks = GameScene.fps_sync.get_frame_count()
-        print "real_time: %f" % GameScene.fps_sync.real_time
-        print "time_stamp: %f" % GameScene.fps_sync.time_stamp
-        print "ticks1 : %f" % ticks
+
         if ticks > 0:
             process_count = 0
-            print "ticks2 : %f" % ticks
             while process_count < ticks:
-                print "GameScene process()"
+                # cocos.scene.Scene.visit(self)
                 process_count += 1
-                for entity in self.game_entities:
-                    entity.process()
+        """
 
-    def visit(self):
-        print "GameScene visit()"
-
-        self.process_scene()
-
-        print "GameScene render()"
-
-        cocos.scene.Scene.visit(self)
-
-
-        print "======================"
-
-    def draw(self, *args, **kwargs):
-        time.sleep(2)
+        scene.Scene.visit(self)
 
     @staticmethod
     def frame_count():
         return GameScene.fps_sync.get_frame_count()
 
 
-class Cell(object):
+class CocosEntityWorld(EntityWorld):
 
-    def __init__(self, board, cell_x, cell_y, type):
-        self._board = board
-        self._cell_x = cell_x
-        self._cell_y = cell_y
-        self._type = type
-        self._piece = None
-
-
-class SpriteRenderComponent(component.RenderComponent):
-
-    def __init__(self):
-        component.Component.__init__(self)
-        self._current_state = "default"
-        self._frame_index = 0
-        self._max_frames = 0
-        self._sprites = []
-        self._layers = []
-        self._layers_render = []
-        self._loop = True
-        self._animation_percent = 0
-        self._position = (0, 0)
-
-        self.on_component_attached = self.on_renderer_attached
-        self.on_component_detached = self.on_renderer_detached
-
-    def create_layer(self, resource, order_index):
-        layer = graphics.SpriteSheetLayer(self, resource, order_index)
-        self._layers.append(layer)
-        self.sort_layers()
-
-    def reset_frame_data(self):
-        self._sprites = []
-        self._max_frames = 0
-
-    def reset_animation(self):
-        self._frame_index = 0
-        self._animation_percent = 0
-
-    def update_frame(self, animation_ticks):
-        self.reset_frame_data()
-        self._max_frames = self.get_animation_frames_count()
-
-        ticks = animation_ticks
-        while ticks > 0:
-            ticks -= 1
-            self._frame_index += 1
-            if self._frame_index >= self._max_frames:
-                if self._loop is not True:
-                    self._frame_index = self._max_frames - 1
-                else:
-                    self._frame_index = 0
-                self._animation_percent = 100
-
-        # Update the animation percentage
-        percent = (self._frame_index / self._max_frames) * 100 if self._max_frames > 1 else 100
-        if percent > self._animation_percent:
-            self._animation_percent = percent
-
-        # Build the array of images to draw in current state
-        for layer in self._layers:
-            if layer.is_hidden is not True:
-                frame_img = layer.get_frame_image(self.current_state, self.current_frame)
-                if frame_img is not None:
-                    self._layers_render.append(layer)
-                    sprite = cocos.sprite.Sprite(frame_img)
-                    sprite.position = self._position
-                    self._sprites.append(sprite)
-
-    def render_frame(self):
-        for sprite in self._sprites:
-            sprite.draw()
-
-    def sort_layers(self):
-        if len(self._layers) > 1:
-            self._layers.sort(key=lambda x: x.order_index)
-
-    def get_animation_frames_count(self):
-        max_frames = 0
-
-        for layer in self._layers:
-            if layer.is_hidden is not True:
-                total_frames = layer.get_frames_count(self.current_state)
-
-                if max_frames < total_frames:
-                    max_frames = total_frames
-
-        return max_frames
-
-    def on_renderer_attached(self, state_event_args):
-        print "Sprite Renderer attached! owner: %s, previous: %s" % \
-              (type(state_event_args.owner).__name__,
-               type(state_event_args.previous_owner).__name__)
-
-    def on_renderer_detached(self, state_event_args):
-        print "Sprite Renderer detached!"
-
-    @property
-    def position(self):
-        return self._position
-
-    @position.setter
-    def position(self, val):
-        self._position = val
-
-    @property
-    def current_state(self):
-        return self._current_state
-
-    @current_state.setter
-    def current_state(self, state):
-        if self.current_state == state:
-            return
-
-        self._current_state = state
-        self._frame_index = 0
-        self._animation_percent = 0
-
-    @property
-    def current_frame(self):
-        return self._frame_index
-
-    @property
-    def max_frames(self):
-        return self._max_frames
-
-
-class BoardPositionComponent(component.Component):
-    """
-    Contains and manages all the cells in this board
-    """
-
-    def __init__(self):
-        component.Component.__init__(self)
-        self._cells_list = []
-        self._state = utils.State()
-
-
-class BoardGenerateComponent(component.Component):
-    """
-    Responsible generating/updating the pieces on the board
-    """
-
-    def __init__(self):
-        pass
-
-
-class BoardRenderComponent(component.RenderComponent):
-
-    def __init__(self):
-        component.Component.__init__(self)
-        self._alpha = 0.25
-        self._image = pyglet.resouce.image("../assets/board_base.png")
-        self._sprite = cocos.sprite.Sprite(self._image)
-
-    def render_frame(self):
-        self._sprite.draw()
-
-    def update_frame(self, animation_ticks=1):
-        pass
-
-
-class PieceComponent(component.Component):
-
-    """
-    The piece represents all the objects that is located in the board and
-    respecting the coordinate system defined by the board and cells. Also
-    they can be eliminated when there is a match-3.
-    """
-
-    def __init__(self, type):
-        component.Component.__init__(self)
-        self._type = type
-        self._state = utils.State()
-
-    def draw(self):
-        pass
-
-
-# Testing
-if __name__ == "__main__":
-
-    import cocos.director
-    import cocos.layer
-
-    import game
-
-    consts = {
-        "window" : {
-            "width": 800,
-            "height": 600,
-            "vsync": True,
-            "resizable": True
-        }
+    _layers_def = {
+        "BACKGROUND_LAYER": 0,
+        "BOARD_LAYER": 1,
+        "CELL_ELEM_LAYER": 2,
+        "PIECE_LAYER": 3
     }
 
-    cocos.director.director.init(**consts["window"])
-    scene = graphics.GameScene()
-    base_layer = cocos.layer.Layer()
+    def __init__(self):
 
-    components = [game.BoardRenderComponent]
-    entity.Entity.define("TestBoardEntityDefine", components)
-    board_entity = entity.Entity.create_from_def("TestBoardEntityDefine", "board_entity")
-    base_layer.add(board_entity)
+        super(CocosEntityWorld, self).__init__()
 
-    scene.add(base_layer, z=-1)
-    scene.add_game_entity()
+        # The root node of all the entities in the world
+        self._scene_node = GameScene()
+        self._init_layers()
 
+    def _init_layers(self):
+        for name, index in self._layers_def.items():
+            l = layer.Layer()
+            self._scene_node.add(l, z=index, name=name)
+
+    def add_system(self, system, layer_name="BACKGROUND_LAYER"):
+        super(CocosEntityWorld, self).add_system(system)
+
+        system_node = EntitySystemNode(system)
+        layer = self._scene_node.get(layer_name)
+        layer.add(system_node, z=system_node.z_index, name=system_node.name)
+
+    def run_world_frame(self):
+        self._scene_node.visit()
+
+
+class Root(object):
+
+    def __init__(self):
+        self._world = None
+
+    def init(self, *args, **kwargs):
+        director.director.init(*args, **kwargs["window"])
+        self._create_world()
+        self._init_system(**kwargs["resource"])
+
+        director.director.window.remove_handlers(director.director.on_draw)
+        director.director.window.push_handlers(self.on_draw)
+
+    def _create_world(self):
+        self._world = CocosEntityWorld()
+
+    def _init_system(self, **kwargs):
+        for keyword, value in kwargs.items():
+            if keyword == "resource_path":
+                pyglet.resource.path = value
+                pyglet.resource.reindex()
+
+    def run(self):
+        director.event_loop.run()
+
+    @property
+    def world(self):
+        return self._world
+
+    def on_draw(self):
+        """Handles the event 'on_draw' from the pyglet.window.Window
+
+            Realizes switch to other scene and app termination if needed
+            Clears the window area
+            The windows is painted as:
+
+                - Render the current scene by calling it's visit method
+                - Eventualy draw the fps metter
+                - Eventually draw the interpreter
+
+            When the window is minimized any pending switch to scene will be
+            delayed to the next de-minimizing time.
+        """
+
+        # typically True when window minimized
+        if ((director.director.window.width == 0 or director.director.window.height == 0) and
+                not director.director.terminate_app):
+            # if surface area is zero, we don't need to draw; also
+            # we dont't want to allow scene changes in this situation: usually
+            # on_enter does some scaling, which would lead to division by zero
+            return
+
+        # handle scene changes and app termination
+        if director.director.terminate_app:
+            director.director.next_scene = None
+
+        if director.director.next_scene is not None or director.director.terminate_app:
+            director.director._set_scene(director.director.next_scene)
+
+        if director.director.terminate_app:
+            pyglet.app.exit()
+            return
+
+        # Start the render loop
+        director.director.window.clear()
+
+        gl.glPushMatrix()
+
+        self.render_frame()
+
+        gl.glPopMatrix()
+
+    def render_frame(self):
+        self._world.begin()
+        self._world.run_world_frame()
+        self._world.end()
+
+
+# Root Singleton
+# Don't use Root(), only use this singleton.
+app_root = Root()

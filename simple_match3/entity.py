@@ -352,7 +352,9 @@ class EntitySystem(EntityEventListener):
         contains = system_cls in entity_rec.get_systems_classes_set()
         interested = True
 
-        if len(self._all) > 0 and self._all > entity_rec.get_components_classes_set():
+        if len(self._all) > 0 and \
+                (self._all > entity_rec.get_components_classes_set() or
+                 self._all.isdisjoint(entity_rec.get_components_classes_set())):
             interested = False
 
         if interested and not contains:
