@@ -102,21 +102,27 @@ class SpriteSheetResource(Resource):
         return None
 
 
-class TiledLayer(object):
-
-    def __init__(self, name, width, height, tiles, z):
+class MapLayer(object):
+    def __init__(self, name, map_type, width, height, image_name, tiles, z):
         self._name = name
         self._width = width
         self._height = height
-        self._tiles = []
-        for tile in tiles:
-            self._tiles.append(tile-1)
-
+        self._image_name = image_name
         self._z_order = z
+        self._type = map_type
+
+        self._tiles = []
+        if tiles:
+            for tile in tiles:
+                self._tiles.append(tile-1)
 
     @property
     def z_order(self):
         return self._z_order
+
+    @property
+    def image_name(self):
+        return self._image_name
 
     @property
     def tiles(self):
@@ -129,6 +135,10 @@ class TiledLayer(object):
     @property
     def height(self):
         return self._height
+
+    @property
+    def type(self):
+        return self._type
 
 
 class TiledBoardResource(Resource):
@@ -146,6 +156,7 @@ class TiledBoardResource(Resource):
 
         # texture regions for each tile
         self._tiles_images = []
+        self._image_layer_textures = {}
 
         #
         self._layers = []
@@ -168,13 +179,32 @@ class TiledBoardResource(Resource):
             tex = self._tileset_image.get_region(offset_x, offset_y, tile_width, tile_height)
             self._tiles_images.append(tex)
 
-    def add_layer(self, name, width, height, tiles, z):
-        layer = TiledLayer(name, width, height, tiles, z)
+    def add_map_layer(self, z, **kwargs):
+        property = kwargs["properties"]
+        width = property["width"]
+        height = property["height"]
+        name = kwargs["name"]
+        type = kwargs["type"]
+        image = None
+        if "image" in kwargs:
+            image = kwargs["image"]
+        tiles = None
+        if "tiles" in kwargs:
+            tiles = kwargs["tiles"]
+        layer = MapLayer(name, type, width, height, image, tiles, z)
         self._layers.append(layer)
         self.sort_layers()
 
     def get_tile_image(self, tile_idx):
         return self._tiles_images[tile_idx]
+
+    def add_image_layer_texture(self, layer_name, texture):
+        self._image_layer_textures[layer_name] = texture
+
+    def get_image_layer_texture(self, layer_name="background"):
+        if layer_name in self._image_layer_textures:
+            return self._image_layer_textures[layer_name]
+        return None
 
     def sort_layers(self):
         if len(self._layers) > 1:
@@ -418,7 +448,14 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
         map_res.setup_tileset(tileset_name, tileset_tex, tile_width, tile_height)
         z_order = 0
         for layer in map_obj["layers"]:
-            map_res.add_layer(layer["name"], layer["width"], layer["height"], layer["data"], z_order)
+            map_res.add_map_layer(z_order, **layer)
+
+            if layer["type"] == "imagelayer":
+                image_file = layer["image"]
+                texture_path = self.get_resource_path(MAP_PATH_PREFIX, image_file)
+                tex = self.texture(texture_path)
+                map_res.add_image_layer_texture(layer["name"], tex)
+
             z_order += 1
 
         return map_res

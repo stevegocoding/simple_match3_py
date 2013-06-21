@@ -2,11 +2,12 @@ __author__ = 'magkbdev'
 
 import pyglet.gl as gl
 import pyglet.graphics
+
 from pyglet.sprite import Sprite
 from pyglet.graphics import Batch
+from pyglet.image import Texture
 
-from gletools import (ShaderProgram, VertexShader, FragmentShader,
-                      Texture, Framebuffer, Sampler2D, Screen)
+from gletools import (ShaderProgram, VertexShader, FragmentShader, Framebuffer, Sampler2D)
 
 from gl_utils import TextureContext
 
@@ -213,6 +214,39 @@ class BoardTilePositionComponent(Component):
 
 class BoardRenderComponent(Component):
 
+    _bg_vertex_list = None
+    _bg_render_vs = VertexShader(
+        """
+        varying vec2 texcoords;
+        void main()
+        {
+            gl_Position = ftransform();
+            texcoords = gl_MultiTexCoord0.st;
+        }
+        """
+    )
+
+    _bg_render_fs = FragmentShader(
+        """
+        varying vec2 texcoords;
+        uniform sampler2D bg_tex;
+
+        void main()
+        {
+            vec4 offset = vec4(0.3, 0.3, 0.3, 0.0);
+            vec4 tex_color = vec4(0.0, 0.0, 0.0, 0.0);
+            tex_color = texture2D(bg_tex, texcoords);
+            gl_FragColor = tex_color + offset;
+            gl_FragColor.w = 1;
+        }
+        """
+    )
+
+    _bg_shader = None
+    _bg_tex_context = None
+    _bg_render_tex_context = None
+    _bg_frame_buffer = Framebuffer()
+
     def __init__(self, board_layout_res):
         Component.__init__(self)
 
@@ -222,24 +256,36 @@ class BoardRenderComponent(Component):
         self._board_position = 0, 0
 
         self._tiles_sprites = []
+        self._bg_tex = self._board_res.get_image_layer_texture("background")
+        self._bg_render_tex = None
+
+        self._x = 0
+        self._y = 0
+
+        self._setup_bg_geometry()
+        self._setup_bg_shader_program()
+        self._setup_bg_texture_context(self._bg_tex)
+        self._setup_bg_render_buffers(self._bg_tex.width, self._bg_tex.height)
+
 
     def reset_tiles_batch(self):
         position_component = self.owner.get_component(BoardTilePositionComponent)
         if position_component:
             self._tiles_batch = Batch()
             for layer in self._board_res.layers:
-                for tile in layer.tiles:
-                    tex = self._board_res.get_tile_image(tile)
-                    sprite = Sprite(tex, batch=self._tiles_batch)
-                    self._tiles_sprites.append(sprite)
+                if layer.type == "tilelayer":
+                    for tile in layer.tiles:
+                        tex = self._board_res.get_tile_image(tile)
+                        sprite = Sprite(tex, batch=self._tiles_batch)
+                        self._tiles_sprites.append(sprite)
+                elif layer.type == "imagelayer":
+                    pass
         else:
             raise Exception("There is no BoardTilePositionComponent attached yet")
 
-    def render_to_texture(self):
-        pass
-
     def render(self):
-        self._tiles_batch.draw()
+        self._render_bg()
+        self._render_board()
 
     def get_tile_xy(self, tile_idx, num_tiles_x, num_tiles_y):
         if num_tiles_x != 0 and num_tiles_y != 0:
@@ -260,6 +306,46 @@ class BoardRenderComponent(Component):
                     sprite_idx += 1
         else:
             raise Exception("There is no BoardTilePositionComponent attached yet")
+
+    def _setup_bg_geometry(self):
+        self._bg_vertex_list = pyglet.graphics.vertex_list(4,
+                                                           'v2i/%s' % "dynamic",
+                                                           'c4b', ('t3f', self._bg_tex.tex_coords))
+        self._update_position()
+
+    def _update_position(self):
+        img = self._bg_tex
+        x1 = int(self._x - img.anchor_x)
+        y1 = int(self._y - img.anchor_y)
+        x2 = x1 + img.width
+        y2 = y1 + img.height
+        self._bg_vertex_list.vertices[:] = [x1, y1, x2, y1, x2, y2, x1, y2]
+
+    def _setup_bg_texture_context(self, pyglet_tex):
+        self._bg_tex_context = TextureContext(pyglet_tex)
+
+    def _setup_bg_shader_program(self):
+        self._bg_shader = ShaderProgram(
+            self._bg_render_vs,
+            self._bg_render_fs,
+        )
+
+        self._bg_shader.vars.bg_tex = Sampler2D(gl.GL_TEXTURE0)
+
+    def _setup_bg_render_buffers(self, bg_width, bg_height):
+        self._bg_render_tex = Texture.create(bg_width, bg_height, gl.GL_RGBA)
+        self._bg_render_tex_context = TextureContext(self._bg_render_tex)
+
+        self._bg_frame_buffer.textures = [self._bg_render_tex_context]
+
+    def _render_bg(self):
+        self._bg_frame_buffer.drawto = [gl.GL_COLOR_ATTACHMENT0_EXT]
+        with self._bg_frame_buffer, self._bg_tex_context, self._bg_shader:
+            self._bg_vertex_list.draw(gl.GL_QUADS)
+
+    def _render_board(self):
+        with self._bg_render_tex_context, self._bg_shader:
+            self._bg_vertex_list.draw(gl.GL_QUADS)
 
 
 class BackgroundRenderComponent(Component):

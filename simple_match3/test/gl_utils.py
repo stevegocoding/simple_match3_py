@@ -27,7 +27,7 @@ class GLObjectContext(object):
     def __enter__(self):
         self._on_enter()
         self._stack.append(get(self._get))
-        self.bind(self.obj_id)
+        self.bind(self.id)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.check()
@@ -44,11 +44,7 @@ class GLObjectContext(object):
     def check(self):
         pass
 
-    def bind(self, id):
-        pass
-
-    @property
-    def obj_id(self):
+    def bind(self, obj_id):
         pass
 
 
@@ -62,16 +58,20 @@ class TextureContext(GLObjectContext):
         self._unit = unit
 
     def bind(self, obj_id):
-        glBindTexture(self._pyglet_tex.target, obj_id)
+        glBindTexture(self.target, obj_id)
 
     def _on_enter(self):
         glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT)
         glActiveTexture(self._unit)
-        glEnable(self._pyglet_tex.target)
+        glEnable(self.target)
 
     def _on_exit(self):
         glPopAttrib()
 
     @property
-    def obj_id(self):
+    def id(self):
         return self._pyglet_tex.id
+
+    @property
+    def target(self):
+        return self._pyglet_tex.target

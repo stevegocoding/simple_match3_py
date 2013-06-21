@@ -1,7 +1,6 @@
 from simple_match3.resource import GameAssetArchiveLoader
 from simple_match3.entity import Aspect
 from simple_match3.entity import EntitySystem
-from simple_match3.world import EntityWorld
 from simple_match3.managers import EntityManager
 
 from entity_factory import BoardTilePositionComponent
@@ -54,7 +53,7 @@ def init_game():
     world.add_manager(EntityManager())
 
     bg_entity = EntityFactory.create_background(world, "background.json")
-    world.add_entity(bg_entity)
+    #world.add_entity(bg_entity)
 
     board_entity = EntityFactory.create_game_board(world, "board_blocks.json", (200, 70))
     world.add_entity(board_entity)
