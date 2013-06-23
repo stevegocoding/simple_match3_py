@@ -249,7 +249,7 @@ class BoardRenderComponent(Component):
             vec4 bg_color = texture2D(bg_tex, texcoords);
             vec4 tile_color = texture2D(tiles_tex, texcoords);
             vec4 result = vec4(0.0, 0.0, 0.0, 0.0);
-            result.xyz = bg_color.xyz * 0.6 + tile_color.xyz * 0.4;
+            result.xyz = bg_color.xyz * 0.7 + tile_color.xyz * 0.3;
             gl_FragColor.xyz = result.xyz;
             gl_FragColor.w = 1;
         }
