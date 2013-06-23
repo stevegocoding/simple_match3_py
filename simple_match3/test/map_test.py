@@ -21,8 +21,9 @@ class BoardRenderSystem(EntitySystem):
 
     def render_entity(self, entity):
         render_component = entity.get_component(BoardRenderComponent)
-        #position_component = entity.get_component(BoardTilePositionComponent)
+        position_component = entity.get_component(BoardTilePositionComponent)
 
+        render_component.update_render_position(position_component)
         render_component.render()
 
 

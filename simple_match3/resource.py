@@ -160,6 +160,7 @@ class TiledBoardResource(Resource):
 
         #
         self._layers = []
+        self._layer_properties = {}
 
     def setup_tileset(self, name, texture, tile_width, tile_height):
         self._tileset_name = name
@@ -189,9 +190,9 @@ class TiledBoardResource(Resource):
         if "image" in kwargs:
             image = kwargs["image"]
         tiles = None
-        if "tiles" in kwargs:
-            tiles = kwargs["tiles"]
-        layer = MapLayer(name, type, width, height, image, tiles, z)
+        if "data" in kwargs:
+            tiles = kwargs["data"]
+        layer = MapLayer(name, type, int(width), int(height), image, tiles, int(z))
         self._layers.append(layer)
         self.sort_layers()
 
@@ -209,6 +210,12 @@ class TiledBoardResource(Resource):
     def sort_layers(self):
         if len(self._layers) > 1:
             self._layers.sort(key=lambda x: x.z_order)
+
+    def add_layer_properties(self, name, properties):
+        self._layer_properties[name] = properties
+
+    def get_layer_properties(self, name):
+        return self._layer_properties[name]
 
     @property
     def board_width(self):
@@ -448,6 +455,7 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
         map_res.setup_tileset(tileset_name, tileset_tex, tile_width, tile_height)
         z_order = 0
         for layer in map_obj["layers"]:
+            map_res.add_layer_properties(layer["name"], layer["properties"])
             map_res.add_map_layer(z_order, **layer)
 
             if layer["type"] == "imagelayer":

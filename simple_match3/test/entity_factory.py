@@ -15,6 +15,7 @@ from simple_match3.managers import EntityManager
 from simple_match3.entity import EntityRecord
 from simple_match3.component import Component
 from simple_match3.resource import ResourceManagerSingleton
+from simple_match3.graphics import SpriteGroupContext
 
 
 class SpriteSheetLayer(object):
@@ -214,8 +215,7 @@ class BoardTilePositionComponent(Component):
 
 class BoardRenderComponent(Component):
 
-    _bg_vertex_list = None
-    _bg_render_vs = VertexShader(
+    _simple_tex_vs = VertexShader(
         """
         varying vec2 texcoords;
         void main()
@@ -226,126 +226,185 @@ class BoardRenderComponent(Component):
         """
     )
 
-    _bg_render_fs = FragmentShader(
+    _simple_tex_fs = FragmentShader(
         """
         varying vec2 texcoords;
-        uniform sampler2D bg_tex;
-
+        uniform sampler2D in_tex;
         void main()
         {
-            vec4 offset = vec4(0.3, 0.3, 0.3, 0.0);
-            vec4 tex_color = vec4(0.0, 0.0, 0.0, 0.0);
-            tex_color = texture2D(bg_tex, texcoords);
-            gl_FragColor = tex_color + offset;
+            vec4 tex_color = texture2D(in_tex, texcoords);
+            gl_FragColor = tex_color;
             gl_FragColor.w = 1;
         }
         """
     )
 
-    _bg_shader = None
+    _blend_fs = FragmentShader(
+        """
+        varying vec2 texcoords;
+        uniform sampler2D bg_tex;
+        uniform sampler2D tiles_tex;
+        void main()
+        {
+            vec4 bg_color = texture2D(bg_tex, texcoords);
+            vec4 tile_color = texture2D(tiles_tex, texcoords);
+            vec4 result = vec4(0.0, 0.0, 0.0, 0.0);
+            result.xyz = bg_color.xyz * 0.6 + tile_color.xyz * 0.4;
+            gl_FragColor.xyz = result.xyz;
+            gl_FragColor.w = 1;
+        }
+        """
+    )
+
+    _bg_vertex_list = None
+    _tiles_vertex_list = None
+
+    _simple_tex_shader = None
+    _blend_shader = None
+
+    _bg_tex = None
     _bg_tex_context = None
+    _bg_render_tex = None
     _bg_render_tex_context = None
     _bg_frame_buffer = Framebuffer()
+
+    _tiles_render_tex = None
+    _tiles_render_tex_context = None
+    _tiles_frame_buffer = Framebuffer()
 
     def __init__(self, board_layout_res):
         Component.__init__(self)
 
         self._board_res = board_layout_res
+        self._tiles_sprites = []
         self._tiles_batch = None
 
-        self._board_position = 0, 0
-
-        self._tiles_sprites = []
         self._bg_tex = self._board_res.get_image_layer_texture("background")
-        self._bg_render_tex = None
 
+        self._board_position = 0, 0
         self._x = 0
         self._y = 0
 
-        self._setup_bg_geometry()
-        self._setup_bg_shader_program()
-        self._setup_bg_texture_context(self._bg_tex)
-        self._setup_bg_render_buffers(self._bg_tex.width, self._bg_tex.height)
+        self._bg_rtt_flag = True
+        self._tiles_rtt_flag = True
 
+        self.create_tiles_sprite_batch()
+        self.create_gpu_resources()
 
-    def reset_tiles_batch(self):
-        position_component = self.owner.get_component(BoardTilePositionComponent)
-        if position_component:
-            self._tiles_batch = Batch()
-            for layer in self._board_res.layers:
-                if layer.type == "tilelayer":
-                    for tile in layer.tiles:
-                        tex = self._board_res.get_tile_image(tile)
-                        sprite = Sprite(tex, batch=self._tiles_batch)
-                        self._tiles_sprites.append(sprite)
-                elif layer.type == "imagelayer":
-                    pass
-        else:
-            raise Exception("There is no BoardTilePositionComponent attached yet")
+    def create_tiles_sprite_batch(self):
+        self._tiles_batch = Batch()
+        for layer in self._board_res.layers:
+            if layer.type == "tilelayer":
+                for tile in layer.tiles:
+                    tex = self._board_res.get_tile_image(tile)
+                    sprite = Sprite(tex)
+                    self._tiles_sprites.append(sprite)
+
+    def create_gpu_resources(self):
+        # Create the vertex list for the background quad
+        self._bg_vertex_list = pyglet.graphics.vertex_list(4,
+                                                           'v2i/%s' % "dynamic",
+                                                           'c4b', ('t3f', self._bg_tex.tex_coords))
+
+        # Setup the texture contexts
+        self._bg_tex_context = TextureContext(self._bg_tex)
+        self._bg_render_tex = Texture.create(self._bg_tex.width, self._bg_tex.height, gl.GL_RGBA)
+        self._bg_render_tex_context = TextureContext(self._bg_render_tex)
+
+        # Update the vertices
+        self._update_vertices_position(self._bg_tex, self._bg_vertex_list)
+
+        self._tiles_render_tex = Texture.create(self._bg_tex.width, self._bg_tex.height, gl.GL_RGBA)
+        self._tiles_render_tex_context = TextureContext(self._tiles_render_tex, unit=gl.GL_TEXTURE1)
+
+        # Create the vertex list
+        self._tiles_vertex_list = pyglet.graphics.vertex_list(4,
+                                                              'v2i/%s' % "dynamic",
+                                                              'c4b', ('t3f', self._tiles_render_tex.tex_coords))
+        self._update_vertices_position(self._tiles_render_tex, self._tiles_vertex_list)
+
+        # Setup the frame buffers
+        self._bg_frame_buffer.textures = [self._bg_render_tex_context]
+        self._tiles_frame_buffer.textures = [self._tiles_render_tex_context]
+
+        # Setup the shader program
+        self._simple_tex_shader = ShaderProgram(
+            self._simple_tex_vs,
+            self._simple_tex_fs
+        )
+        self._simple_tex_shader.vars.in_tex = Sampler2D(gl.GL_TEXTURE0)
+        self._blend_shader = ShaderProgram(
+            self._simple_tex_vs,
+            self._blend_fs
+        )
+        self._blend_shader.vars.bg_tex = Sampler2D(gl.GL_TEXTURE0)
+        self._blend_shader.vars.tiles_tex = Sampler2D(gl.GL_TEXTURE1)
+
+    def _update_vertices_position(self, tex, vertex_list):
+        x1 = int(self._x - tex.anchor_x)
+        y1 = int(self._y - tex.anchor_y)
+        x2 = x1 + tex.width
+        y2 = y1 + tex.height
+        vertex_list.vertices[:] = [x1, y1, x2, y1, x2, y2, x1, y2]
 
     def render(self):
-        self._render_bg()
-        self._render_board()
 
-    def get_tile_xy(self, tile_idx, num_tiles_x, num_tiles_y):
-        if num_tiles_x != 0 and num_tiles_y != 0:
-            tile_y = tile_idx / num_tiles_x
-            tile_x = tile_idx - tile_y * num_tiles_x
-            return tile_x, tile_y
-        return -1, -1
+        #if self._bg_rtt_flag:
+        self._render_bg_to_texture()
 
-    def update_render_position(self):
-        position_component = self.owner.get_component(BoardTilePositionComponent)
+        #self._test_bg_render()
+
+        #if self._tiles_rtt_flag:
+        self._render_tiles_to_one_texture()
+
+        #self._test_sprites_render()
+
+        self._render_tiles_with_bg()
+
+    def update_render_position(self, position_component):
         if position_component:
             sprite_idx = 0
             for layer in self._board_res.layers:
                 for tile_idx in range(len(layer.tiles)):
-                    x, y = self.get_tile_xy(tile_idx, layer.width, layer.height)
+                    x, y = self._get_tile_xy(tile_idx, layer.width, layer.height)
                     sprite = self._tiles_sprites[sprite_idx]
                     sprite.position = position_component.get_render_position(x, y)
                     sprite_idx += 1
         else:
             raise Exception("There is no BoardTilePositionComponent attached yet")
 
-    def _setup_bg_geometry(self):
-        self._bg_vertex_list = pyglet.graphics.vertex_list(4,
-                                                           'v2i/%s' % "dynamic",
-                                                           'c4b', ('t3f', self._bg_tex.tex_coords))
-        self._update_position()
+    def _get_tile_xy(self, tile_idx, num_tiles_x, num_tiles_y):
+        if num_tiles_x != 0 and num_tiles_y != 0:
+            tile_y = tile_idx / num_tiles_x
+            tile_x = tile_idx - tile_y * num_tiles_x
+            return tile_x, tile_y
+        return -1, -1
 
-    def _update_position(self):
-        img = self._bg_tex
-        x1 = int(self._x - img.anchor_x)
-        y1 = int(self._y - img.anchor_y)
-        x2 = x1 + img.width
-        y2 = y1 + img.height
-        self._bg_vertex_list.vertices[:] = [x1, y1, x2, y1, x2, y2, x1, y2]
-
-    def _setup_bg_texture_context(self, pyglet_tex):
-        self._bg_tex_context = TextureContext(pyglet_tex)
-
-    def _setup_bg_shader_program(self):
-        self._bg_shader = ShaderProgram(
-            self._bg_render_vs,
-            self._bg_render_fs,
-        )
-
-        self._bg_shader.vars.bg_tex = Sampler2D(gl.GL_TEXTURE0)
-
-    def _setup_bg_render_buffers(self, bg_width, bg_height):
-        self._bg_render_tex = Texture.create(bg_width, bg_height, gl.GL_RGBA)
-        self._bg_render_tex_context = TextureContext(self._bg_render_tex)
-
-        self._bg_frame_buffer.textures = [self._bg_render_tex_context]
-
-    def _render_bg(self):
+    def _render_bg_to_texture(self):
         self._bg_frame_buffer.drawto = [gl.GL_COLOR_ATTACHMENT0_EXT]
-        with self._bg_frame_buffer, self._bg_tex_context, self._bg_shader:
+        with self._bg_frame_buffer, self._bg_tex_context, self._simple_tex_shader:
+            self._bg_vertex_list.draw(gl.GL_QUADS)
+            self._bg_rtt_flag = False
+
+    def _render_tiles_to_one_texture(self):
+        self._tiles_frame_buffer.drawto = [gl.GL_COLOR_ATTACHMENT0_EXT]
+        with self._tiles_frame_buffer, self._simple_tex_shader:
+            for sprite in self._tiles_sprites:
+                sprite.draw()
+
+            self._tiles_rtt_flag = False
+
+    def _test_bg_render(self):
+        with self._bg_render_tex_context, self._simple_tex_shader:
             self._bg_vertex_list.draw(gl.GL_QUADS)
 
-    def _render_board(self):
-        with self._bg_render_tex_context, self._bg_shader:
-            self._bg_vertex_list.draw(gl.GL_QUADS)
+    def _test_sprites_render(self):
+        with self._tiles_render_tex_context, self._simple_tex_shader:
+            self._tiles_vertex_list.draw(gl.GL_QUADS)
+
+    def _render_tiles_with_bg(self):
+        with self._bg_render_tex_context, self._tiles_render_tex_context, self._blend_shader:
+            self._tiles_vertex_list.draw(gl.GL_QUADS)
 
 
 class BackgroundRenderComponent(Component):
@@ -477,8 +536,5 @@ class EntityFactory(object):
 
         render_component = BoardRenderComponent(board_layout_res)
         entity.attach_component(render_component)
-
-        render_component.reset_tiles_batch()
-        render_component.update_render_position()
 
         return entity

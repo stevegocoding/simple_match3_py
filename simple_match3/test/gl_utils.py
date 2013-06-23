@@ -47,6 +47,12 @@ class GLObjectContext(object):
     def bind(self, obj_id):
         pass
 
+    def set_state(self):
+        self.__enter__()
+
+    def unset_state(self):
+        self.__exit__(None, None, None)
+
 
 class TextureContext(GLObjectContext):
 
