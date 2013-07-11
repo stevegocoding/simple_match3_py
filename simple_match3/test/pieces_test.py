@@ -117,7 +117,7 @@ def init_game():
     board_entity = EntityFactory.create_game_board(world, "board_blocks_test_hole.json", (200, 70))
     world.add_entity(board_entity)
 
-    gem_entity = EntityFactory.create_gem(world, board_entity, "pink_hex", (2, 1))
+    gem_entity = EntityFactory.create_gem(world, board_entity, "pink_hex", (3, 2))
     world.add_entity(gem_entity)
 
 if __name__ == "__main__":

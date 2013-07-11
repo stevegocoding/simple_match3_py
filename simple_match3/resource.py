@@ -252,11 +252,11 @@ class TiledBoardResource(Resource):
 
     @property
     def board_width(self):
-        return self._layers[0].width
+        return self._layer_properties["board_layer"]["width"]
 
     @property
     def board_height(self):
-        return self._layers[0].height
+        return self._layer_properties["board_layer"]["height"]
 
     @property
     def tile_width(self):

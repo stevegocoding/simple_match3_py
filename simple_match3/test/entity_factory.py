@@ -191,10 +191,10 @@ class BoardTilePositionComponent(Component):
 
         self._origin_x = origin_pos[0]
         self._origin_y = origin_pos[1]
-        self._num_cols = num_cols
-        self._num_rows = num_rows
-        self._cell_width = cell_width
-        self._cell_height = cell_height
+        self._num_cols = int(num_cols)
+        self._num_rows = int(num_rows)
+        self._cell_width = int(cell_width)
+        self._cell_height = int(cell_height)
 
     def get_render_position(self, x, y):
         pos_x = 0
@@ -616,7 +616,6 @@ class GemsRenderComponent(Component):
 
         self._render_position = (0, 0)
 
-        test_img = pyglet.image.load("test_gem.png")
         self._sprite = Sprite(img)
 
         self._state = State()
