@@ -1,0 +1,39 @@
+<?xml version="1.0" ?>
+<Resource>
+    <imageatlas file="gems.png" size="64x512">
+        <image id="purple_quad_00" offset="0,448" size="64x64"/>
+        <image id="green_orb_00" offset="0,384" size="64x64"/>
+        <image id="purple_orb_00" offset="0,320" size="64x64"/>
+        <image id="green_hex_00" offset="0,256" size="64x64"/>
+        <image id="black_quad_00" offset="0,192" size="64x64"/>
+        <image id="silver_triangle_00" offset="0,128" size="64x64"/>
+        <image id="pink_hex_00" offset="0,64" size="64x64"/>
+        <image id="arrows_1_00" offset="0,0" size="64x64"/>
+    </imageatlas>
+    <animation>
+        <sequence name="purple_quad">
+            <frame id="purple_quad_00"/>
+        </sequence>
+        <sequence name="green_orb">
+            <frame id="green_orb_00"/>
+        </sequence>
+        <sequence name="purple_orb">
+            <frame id="purple_orb_00"/>
+        </sequence>
+        <sequence name="green_hex">
+            <frame id="green_hex_00"/>
+        </sequence>
+        <sequence name="black_quad">
+            <frame id="black_quad_00"/>
+        </sequence>
+        <sequence name="silver_triangle">
+            <frame id="silver_triangle_00"/>
+        </sequence>
+        <sequence name="pink_hex">
+            <frame id="pink_hex_00"/>
+        </sequence>
+        <sequence name="arrows_1">
+            <frame id="arrows_1_00"/>
+        </sequence>
+    </animation>
+</Resource>

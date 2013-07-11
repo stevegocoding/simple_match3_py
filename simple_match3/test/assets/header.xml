@@ -3,6 +3,7 @@
     <level name="test_level">
         <gfx name="rotating_crystals" type="spritesheet"/>
         <gfx name="background.json" type="texture"/>
+        <gfx name="gems" type="spritesheet"/>
         <map name="board_blocks_test_hole.json" type="json"/>
         <map name="board_blocks.json" type="json"/>
     </level>

@@ -602,6 +602,9 @@ class BackgroundRenderComponent(Component):
             self._vertex_list.draw(gl.GL_QUADS)
 
 
+import pyglet.image
+
+
 class GemsRenderComponent(Component):
 
     def __init__(self, sprite_sheet_res, type):
@@ -609,10 +612,11 @@ class GemsRenderComponent(Component):
 
         self._type = type
 
-        img = sprite_sheet_res.get_frame_img(type, 0)
+        img = sprite_sheet_res.get_frame_image(type, 0)
 
         self._render_position = (0, 0)
 
+        test_img = pyglet.image.load("test_gem.png")
         self._sprite = Sprite(img)
 
         self._state = State()
@@ -741,7 +745,7 @@ class EntityFactory(object):
         pass
 
     @staticmethod
-    def create_gem(world, gem_type, pos):
+    def create_gem(world, gem_type):
         entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
 
         gems_sprite_res = ResourceManagerSingleton.instance().find_resource("gems")
@@ -749,8 +753,8 @@ class EntityFactory(object):
         render_component = GemsRenderComponent(gems_sprite_res, gem_type)
         entity.attach_component(render_component)
 
-        physics_component = PhysicsComponent(pos)
-        entity.attach_component(physics_component)
+        #physics_component = PhysicsComponent(pos)
+        #entity.attach_component(physics_component)
 
         return entity
 

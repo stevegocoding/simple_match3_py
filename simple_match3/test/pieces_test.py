@@ -54,9 +54,8 @@ class GemsRenderSystem(EntitySystem):
 
     def render_entity(self, entity):
         render_component = entity.get_component(GemsRenderComponent)
-        position_component = entity.get_component(BoardTilePositionComponent)
 
-        render_component.update_render_position(position_component)
+        render_component.render_position = 50, 50
         render_component.render()
 
 
@@ -108,11 +107,14 @@ def init_game():
 
     world = app_root.world
     world.add_system(BoardRenderSystem(), layer_name="BOARD_LAYER")
+    world.add_system(GemsRenderSystem(), layer_name="PIECE_LAYER")
     world.add_manager(EntityManager())
 
     board_entity = EntityFactory.create_game_board(world, "board_blocks_test_hole.json", (200, 70))
     world.add_entity(board_entity)
 
+    gem_entity = EntityFactory.create_gem(world, "pink_hex")
+    world.add_entity(gem_entity)
 
 if __name__ == "__main__":
 
