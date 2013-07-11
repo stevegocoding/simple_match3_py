@@ -15,7 +15,9 @@ from simple_match3.managers import EntityManager
 from simple_match3.entity import EntityRecord
 from simple_match3.component import Component
 from simple_match3.resource import ResourceManagerSingleton
-from simple_match3.graphics import SpriteGroupContext
+from simple_match3.utils import State
+
+import random
 
 
 class SpriteSheetLayer(object):
@@ -212,6 +214,100 @@ class BoardTilePositionComponent(Component):
         self._origin_x = val[0]
         self._origin_y = val[1]
 
+    @property
+    def cell_width(self):
+        return self._cell_width
+
+    @property
+    def cell_height(self):
+        return self._cell_height
+
+    @property
+    def num_cols(self):
+        return self._num_cols
+
+    @property
+    def num_rows(self):
+        return self._num_rows
+
+
+class BoardCell(object):
+
+    def __init__(self, row, col, accessible):
+        self._row = row
+        self._col = col
+        self._accessible = accessible
+        if accessible:
+            self._items = list()
+        else:
+            self._items = None
+
+    def clear_items(self):
+        if self._items:
+            del self._items[:]
+
+    def add_item(self, item):
+        if self._items:
+            self._items.append(item)
+
+    @property
+    def accessible(self):
+        return self._accessible
+
+
+class BoardItemsComponent(Component):
+    """
+    Manages the logic items in the board, such as some blockers...
+    """
+
+    tileset_name = "gems2_small_alpha"
+
+    def __init__(self, board_res):
+        super(BoardItemsComponent, self).__init__()
+
+        self._cell_width = board_res.tile_width
+        self._cell_height = board_res.tile_height
+        self._board_width = board_res.board_width
+        self._board_height = board_res.board_height
+
+        self._board_cells = None
+        self._init_cells(board_res)
+
+    def _init_cells(self, board_res):
+        self._board_cells = [[]]
+        tiles = None
+        for layer in board_res.layers:
+            if layer.type == "tilelayer":
+                tiles = list(layer.tiles)
+                break
+
+        properties = board_res.get_tileset_properties(self.tileset_name)
+        inaccessible_tile = properties["inaccessible_tile"]
+
+        if len(tiles) == board_res.board_width * board_res.board_height:
+            for i in range(board_res.board_height):
+                self._board_cells.append(list())
+                for j in range(board_res.board_width):
+                    accessible = tiles[i*board_res.board_width + j] == inaccessible_tile
+                    self._board_cells[i].append(BoardCell(i, j, accessible))
+
+    def get_cell(self, row, col):
+        return self._board_cells[row][col]
+
+    def get_cell_by_render_pos(self, pos, board_render_pos):
+        local = self._render_pos_to_local(pos, board_render_pos)
+        col = local[0] / self._cell_width
+        row = local[1] / self._cell_height
+
+        return self.get_cell(row, col)
+
+    def is_cell_accessible(self, row, col):
+        cell = self.get_cell(row, col)
+        return cell.accessible
+
+    def _render_pos_to_local(self, pos, board_render_pos):
+        return pos - board_render_pos
+
 
 class BoardRenderComponent(Component):
 
@@ -234,7 +330,6 @@ class BoardRenderComponent(Component):
         {
             vec4 tex_color = texture2D(in_tex, texcoords);
             gl_FragColor = tex_color;
-            gl_FragColor.w = 1;
         }
         """
     )
@@ -249,7 +344,10 @@ class BoardRenderComponent(Component):
             vec4 bg_color = texture2D(bg_tex, texcoords);
             vec4 tile_color = texture2D(tiles_tex, texcoords);
             vec4 result = vec4(0.0, 0.0, 0.0, 0.0);
-            result.xyz = bg_color.xyz * 0.7 + tile_color.xyz * 0.3;
+            vec3 white = vec3(1.0, 1.0, 1.0);
+            //result.xyz = bg_color.xyz * 0.6 + tile_color.xyz * 0.4;
+            //result.xyz = bg_color.xyz * (white - tile_color.xyz) + tile_color.xyz;
+            result.xyz = bg_color.xyz * (1.0 - tile_color.w) + tile_color.xyz * tile_color.w;
             gl_FragColor.xyz = result.xyz;
             gl_FragColor.w = 1;
         }
@@ -293,9 +391,12 @@ class BoardRenderComponent(Component):
 
     def create_tiles_sprite_batch(self):
         self._tiles_batch = Batch()
+
         for layer in self._board_res.layers:
-            if layer.type == "tilelayer":
+            if layer.type == "tilelayer" and layer.name != "items_layer":
                 for tile in layer.tiles:
+                    if tile == 17:
+                        continue
                     tex = self._board_res.get_tile_image(tile)
                     sprite = Sprite(tex)
                     self._tiles_sprites.append(sprite)
@@ -357,19 +458,29 @@ class BoardRenderComponent(Component):
         #if self._tiles_rtt_flag:
         self._render_tiles_to_one_texture()
 
-        #self._test_sprites_render()
+        #self._test_sprites_render2()
 
         self._render_tiles_with_bg()
 
     def update_render_position(self, position_component):
         if position_component:
             sprite_idx = 0
+            tile_idx = 0
             for layer in self._board_res.layers:
-                for tile_idx in range(len(layer.tiles)):
+                if layer.name == "items_layer":
+                    break
+
+                for tile in layer.tiles:
+                    if tile == 17:
+                        tile_idx += 1
+                        continue
+                    if sprite_idx >= len(self._tiles_sprites):
+                        break
                     x, y = self._get_tile_xy(tile_idx, layer.width, layer.height)
                     sprite = self._tiles_sprites[sprite_idx]
                     sprite.position = position_component.get_render_position(x, y)
                     sprite_idx += 1
+                    tile_idx += 1
         else:
             raise Exception("There is no BoardTilePositionComponent attached yet")
 
@@ -401,6 +512,10 @@ class BoardRenderComponent(Component):
     def _test_sprites_render(self):
         with self._tiles_render_tex_context, self._simple_tex_shader:
             self._tiles_vertex_list.draw(gl.GL_QUADS)
+
+    def _test_sprites_render2(self):
+        for sprite in self._tiles_sprites:
+            sprite.draw()
 
     def _render_tiles_with_bg(self):
         with self._bg_render_tex_context, self._tiles_render_tex_context, self._blend_shader:
@@ -487,6 +602,85 @@ class BackgroundRenderComponent(Component):
             self._vertex_list.draw(gl.GL_QUADS)
 
 
+class GemsRenderComponent(Component):
+
+    def __init__(self, sprite_sheet_res, type):
+        super(GemsRenderComponent, self).__init__()
+
+        self._type = type
+
+        img = sprite_sheet_res.get_frame_img(type, 0)
+
+        self._render_position = (0, 0)
+
+        self._sprite = Sprite(img)
+
+        self._state = State()
+
+    def render(self):
+        self._sprite.position = self._render_position
+        self._sprite.draw()
+
+    @property
+    def render_position(self):
+        return self._sprite.position
+
+    @render_position.setter
+    def render_position(self, pos):
+        self._render_position = pos
+
+
+class GemsSpawnComponent(Component):
+
+    _gems_type = ["purple_quad",
+                  "silver_triangle,"
+                  "black_quad",
+                  "green_hex,"
+                  "purple_orb",
+                  "green_orb"]
+
+    def __init__(self, spawn_pos):
+        super(GemsSpawnComponent, self).__init__()
+        self._spawn_pos = spawn_pos
+        self._num_gems_type = len(self._gems_type)
+
+    def _generate_new_gem_idx(self):
+        return random.randint(1, self._num_gems_type)
+
+    @property
+    def spawn_pos(self):
+        return self._spawn_pos
+
+    @property
+    def next_gem_type(self):
+        return self._generate_new_gem_idx()
+
+
+class PhysicsComponent(Component):
+
+    def __init__(self, pos):
+        self._current_pos = pos
+        self._current_cell = None
+        self._collision_obj = None
+
+        self._state = State()
+
+        self._state.add_state(State().assign({"id": "falling_state",
+                                              "enter_func": self._on_falling_enter,
+                                              "process_func": self._on_falling_process,
+                                              "exit_func": self._on_falling_exit}))
+
+    def check_collision_cell(self, collision_obj):
+        return False
+
+    def update_collision_obj(self, render_pos, cell):
+        pass
+
+    @property
+    def collision_obj(self):
+        return self._collision_obj
+
+
 class EntityFactory(object):
     def __init__(self):
         pass
@@ -537,4 +731,29 @@ class EntityFactory(object):
         render_component = BoardRenderComponent(board_layout_res)
         entity.attach_component(render_component)
 
+        #items_component = BoardItemsComponent(board_layout_res)
+        #entity.attach_component(items_component)
+
         return entity
+
+    @staticmethod
+    def create_spawn_pipe(world, spawn_pos):
+        pass
+
+    @staticmethod
+    def create_gem(world, gem_type, pos):
+        entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
+
+        gems_sprite_res = ResourceManagerSingleton.instance().find_resource("gems")
+
+        render_component = GemsRenderComponent(gems_sprite_res, gem_type)
+        entity.attach_component(render_component)
+
+        physics_component = PhysicsComponent(pos)
+        entity.attach_component(physics_component)
+
+        return entity
+
+
+
+

@@ -1,5 +1,11 @@
 class EventArgs(object):
-    pass
+
+    def __init__(self, event_type):
+        self._type = event_type
+
+    @property
+    def event_type(self):
+        return self._type
 
 
 class EventHook(object):
@@ -43,7 +49,7 @@ class ComponentSyncEventArgs(EventArgs):
 
 class EntityEventArgs(EventArgs):
     def __init__(self, entity_rec):
-        super(EntityEventArgs, self).__init__()
+        super(EntityEventArgs, self).__init__("entity_event")
         self._entity_rec = entity_rec
 
     @property

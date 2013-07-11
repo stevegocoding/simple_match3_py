@@ -13,6 +13,9 @@ class EntityEventListener(object):
     def on_entity_changed(self, event_args):
         pass
 
+    def on_event(self, event_args):
+        pass
+
 
 class EntityRecord(object):
 
@@ -240,6 +243,7 @@ class Aspect(object):
     def __init__(self):
         self._all = set()
         self._exclude = set()
+        self._one_of = set()
 
     @property
     def all(self):
@@ -257,10 +261,24 @@ class Aspect(object):
     def exclude(self, components_cls):
         self._exclude = set(components_cls)
 
+    @property
+    def one_of(self):
+        return self._one_of
+
+    @one_of.setter
+    def one_of(self, components_cls):
+        self._one_of = set(components_cls)
+
     @staticmethod
     def create_aspect_for_all(components_cls):
         aspect = Aspect()
         aspect.all = set(components_cls)
+        return aspect
+
+    @staticmethod
+    def create_aspect_for_one_of(component_cls):
+        aspect = Aspect()
+        aspect.one_of = component_cls
         return aspect
 
     @staticmethod
@@ -275,6 +293,7 @@ class EntitySystem(EntityEventListener):
         self._aspect = aspect
         self._all = aspect.all
         self._exclude = aspect.exclude
+        self._one_of = aspect.one_of
 
         self._active_entities = []
 
@@ -356,6 +375,10 @@ class EntitySystem(EntityEventListener):
                 (self._all > entity_rec.get_components_classes_set() or
                  self._all.isdisjoint(entity_rec.get_components_classes_set())):
             interested = False
+
+        if len(self._one_of) > 0:
+            intersections_set = self._one_of.intersection(entity_rec.get_components_classes_set())
+            return len(intersections_set) > 0
 
         if interested and not contains:
             self.insert_entity(entity_rec)

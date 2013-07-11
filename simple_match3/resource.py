@@ -117,6 +117,10 @@ class MapLayer(object):
                 self._tiles.append(tile-1)
 
     @property
+    def name(self):
+        return self._name
+
+    @property
     def z_order(self):
         return self._z_order
 
@@ -141,18 +145,44 @@ class MapLayer(object):
         return self._type
 
 
+class MapTileset(object):
+    def __init__(self, name, texture, tile_width, tile_height):
+        self._name = name
+        self._tileset_texture = texture
+        self._tile_width = tile_width
+        self._tile_height = tile_height
+        self._num_tiles_x = texture.width / tile_width
+        self._num_tiles_y = texture.height / tile_height
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def tileset_texture(self):
+        return self._tileset_texture
+
+    @property
+    def tile_width(self):
+        return self._tile_width
+
+    @property
+    def tile_height(self):
+        return self._tile_height
+
+    @property
+    def num_tiles_x(self):
+        return self._num_tiles_x
+
+    @property
+    def num_tiles_y(self):
+        return self._num_tiles_y
+
+
 class TiledBoardResource(Resource):
 
     def __init__(self, name):
         Resource.__init__(self, name)
-
-        self._tileset_name = None
-        self._tileset_image = None
-        self._num_tiles_x = 1
-        self._num_tiles_y = 1
-
-        self._tile_width = 0
-        self._tile_height = 0
 
         # texture regions for each tile
         self._tiles_images = []
@@ -162,22 +192,22 @@ class TiledBoardResource(Resource):
         self._layers = []
         self._layer_properties = {}
 
-    def setup_tileset(self, name, texture, tile_width, tile_height):
-        self._tileset_name = name
-        self._tileset_image = texture
-        self._tile_width = tile_width
-        self._tile_height = tile_height
+        self._tilesets = []
+        self._tileset_properties = {}
 
-        self._num_tiles_x = texture.width / tile_width
-        self._num_tiles_y = texture.height / tile_height
+    def setup_tileset(self, name, texture, tile_width, tile_height, properties):
+        tileset = MapTileset(name, texture, tile_width, tile_height)
+        self._tilesets.append(tileset)
 
-        num_tiles = self._num_tiles_x * self._num_tiles_y
+        self._tileset_properties[name] = properties
+
+        num_tiles = tileset.num_tiles_x * tileset.num_tiles_y
         for i in range(num_tiles):
-            tile_y = i / self._num_tiles_x
-            tile_x = i - tile_y * self._num_tiles_x
+            tile_y = i / tileset.num_tiles_x
+            tile_x = i - tile_y * tileset.num_tiles_x
             offset_x = tile_x * tile_width
-            offset_y = self._tileset_image.height - (tile_y+1) * tile_height
-            tex = self._tileset_image.get_region(offset_x, offset_y, tile_width, tile_height)
+            offset_y = texture.height - (tile_y+1) * tile_height
+            tex = tileset.tileset_texture.get_region(offset_x, offset_y, tile_width, tile_height)
             self._tiles_images.append(tex)
 
     def add_map_layer(self, z, **kwargs):
@@ -217,6 +247,9 @@ class TiledBoardResource(Resource):
     def get_layer_properties(self, name):
         return self._layer_properties[name]
 
+    def get_tileset_properties(self, name):
+        return self._tileset_properties[name]
+
     @property
     def board_width(self):
         return self._layers[0].width
@@ -227,15 +260,19 @@ class TiledBoardResource(Resource):
 
     @property
     def tile_width(self):
-        return self._tile_width
+        return self._tilesets[0].tile_width
 
     @property
     def tile_height(self):
-        return self._tile_height
+        return self._tilesets[0].tile_height
 
     @property
     def layers(self):
         return self._layers
+
+    @property
+    def tilesets(self):
+        return self._tilesets
 
 
 class SimpleTextureResource(Resource):
@@ -443,18 +480,32 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
 
     def load_tiled_map_json(self, file_handle, name):
         map_obj = json.load(file_handle)
-        tileset_name = map_obj["tilesets"][0]["name"]
-        tileset_image_file = map_obj["tilesets"][0]["image"]
-        tile_width = map_obj["tilesets"][0]["tilewidth"]
-        tile_height = map_obj["tilesets"][0]["tileheight"]
-
         map_res = TiledBoardResource(name)
-        texture_path = self.get_resource_path(MAP_PATH_PREFIX, tileset_image_file)
-        tileset_tex = self.texture(texture_path)
 
-        map_res.setup_tileset(tileset_name, tileset_tex, tile_width, tile_height)
+        self._load_tilesets(map_res, map_obj)
+        self._load_layers(map_res, map_obj)
+
+        return map_res
+
+    def _load_tilesets(self, map_res, map_obj):
+        num_tilesets = len(map_obj["tilesets"])
+
+        for i in range(num_tilesets):
+            tileset_data = map_obj["tilesets"]
+            tileset_name = tileset_data[i]["name"]
+            tileset_image_file = tileset_data[i]["image"]
+            texture_path = self.get_resource_path(MAP_PATH_PREFIX, tileset_image_file)
+            tileset_tex = self.texture(texture_path)
+
+            tileset_properties = tileset_data[i]["properties"]
+            tile_width = tileset_data[i]["tilewidth"]
+            tile_height = tileset_data[i]["tileheight"]
+            map_res.setup_tileset(tileset_name, tileset_tex, tile_width, tile_height, tileset_properties)
+
+    def _load_layers(self, map_res, map_obj):
         z_order = 0
         for layer in map_obj["layers"]:
+
             map_res.add_layer_properties(layer["name"], layer["properties"])
             map_res.add_map_layer(z_order, **layer)
 
@@ -465,8 +516,6 @@ class GameAssetArchiveLoader(pyglet.resource.Loader):
                 map_res.add_image_layer_texture(layer["name"], tex)
 
             z_order += 1
-
-        return map_res
 
     def load_simple_texture(self, file_handle, name):
         res_obj = json.load(file_handle)

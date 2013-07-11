@@ -7,7 +7,7 @@ class State(object):
     changed_name = "CHANGED"
 
     def __init__(self, id="machine"):
-        self.id = id;
+        self.id = id
         self.parent = None
         self.children = {}
         self.data = {}
