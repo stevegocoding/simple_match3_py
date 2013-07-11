@@ -634,6 +634,28 @@ class GemsRenderComponent(Component):
         self._render_position = pos
 
 
+class GemsPositionComponent(Component):
+
+    def __init__(self, board_pos_component, cell_x, cell_y):
+        super(GemsPositionComponent, self).__init__()
+
+        self._cell_x = cell_x
+        self._cell_y = cell_y
+
+        self._board_pos_component = board_pos_component
+
+    def get_render_position(self):
+        return self._board_pos_component.get_render_position(self._cell_x, self._cell_y)
+
+    @property
+    def cell_x(self):
+        return self._cell_x
+
+    @property
+    def cell_y(self):
+        return self._cell_y
+
+
 class GemsSpawnComponent(Component):
 
     _gems_type = ["purple_quad",
@@ -745,13 +767,17 @@ class EntityFactory(object):
         pass
 
     @staticmethod
-    def create_gem(world, gem_type):
+    def create_gem(world, board_entity, gem_type, pos):
         entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
 
         gems_sprite_res = ResourceManagerSingleton.instance().find_resource("gems")
 
         render_component = GemsRenderComponent(gems_sprite_res, gem_type)
         entity.attach_component(render_component)
+
+        board_pos_component = board_entity.get_component(BoardTilePositionComponent)
+        pos_component = GemsPositionComponent(board_pos_component, pos[0], pos[1])
+        entity.attach_component(pos_component)
 
         #physics_component = PhysicsComponent(pos)
         #entity.attach_component(physics_component)
