@@ -205,6 +205,9 @@ class BoardTilePositionComponent(Component):
 
         return pos_x, pos_y
 
+    def is_pos_valid(self, x, y):
+        return 0 <= x < self._num_cols and 0 <= y < self._num_rows
+
     @property
     def origin_position(self):
         return self._origin_x, self._origin_y
@@ -242,6 +245,8 @@ class BoardCell(object):
         else:
             self._items = None
 
+        self._gem_item = None
+
     def clear_items(self):
         if self._items:
             del self._items[:]
@@ -250,14 +255,26 @@ class BoardCell(object):
         if self._items:
             self._items.append(item)
 
+    def remove_item(self, item):
+        if self._items:
+            self._items.remove(item)
+
     @property
     def accessible(self):
         return self._accessible
 
+    @property
+    def gem_item(self):
+        return self._gem_item
+
+    @gem_item.setter
+    def gem_item(self, gem_item_component):
+        self._gem_item = gem_item_component
+
 
 class BoardItemsComponent(Component):
     """
-    Manages the logic items in the board, such as some blockers...
+    Manages the logic items in the board, such as gems and blockers...
     """
 
     tileset_name = "gems2_small_alpha"
@@ -269,6 +286,7 @@ class BoardItemsComponent(Component):
         self._cell_height = board_res.tile_height
         self._board_width = board_res.board_width
         self._board_height = board_res.board_height
+        self._board_origin = board_res.board_origin
 
         self._board_cells = None
         self._init_cells(board_res)
@@ -281,15 +299,15 @@ class BoardItemsComponent(Component):
                 tiles = list(layer.tiles)
                 break
 
-        properties = board_res.get_tileset_properties(self.tileset_name)
-        inaccessible_tile = properties["inaccessible_tile"]
+        #properties = board_res.get_tileset_properties(self.tileset_name)
+        #inaccessible_tile = properties["inaccessible_tile"]
 
         if len(tiles) == board_res.board_width * board_res.board_height:
             for i in range(board_res.board_height):
                 self._board_cells.append(list())
                 for j in range(board_res.board_width):
-                    accessible = tiles[i*board_res.board_width + j] == inaccessible_tile
-                    self._board_cells[i].append(BoardCell(i, j, accessible))
+                    #accessible = tiles[i*board_res.board_width + j] == inaccessible_tile
+                    self._board_cells[i].append(BoardCell(i, j, True))
 
     def get_cell(self, row, col):
         return self._board_cells[row][col]
@@ -307,6 +325,33 @@ class BoardItemsComponent(Component):
 
     def _render_pos_to_local(self, pos, board_render_pos):
         return pos - board_render_pos
+
+    def can_fall(self, current_pos_x, current_pos_y):
+        below_pos = current_pos_x, current_pos_y-1
+        below_cell = self.get_cell(below_pos[0], below_pos[1])
+
+        return below_pos[1] >= 0 and below_cell.gem_item is None
+
+    def get_render_position(self, board_pos_x, board_pos_y):
+        pos_x = 0
+        pos_y = 0
+        if board_pos_x < self._board_width and board_pos_y < self._board_height:
+            pos_x = self._board_origin[0] + board_pos_x * self._cell_width
+            pos_y = self._board_origin[1] + board_pos_y * self._cell_height
+
+        return pos_x, pos_y
+
+    def update_gem_cell(self, gem_item_component, prev_pos, cur_pos):
+        self.get_cell(prev_pos[0], prev_pos[1]).gem_item = None
+        self.get_cell(cur_pos[0], cur_pos[1]).gem_item = gem_item_component
+
+    @property
+    def cell_width(self):
+        return self._cell_width
+
+    @property
+    def cell_height(self):
+        return self._cell_height
 
 
 class BoardRenderComponent(Component):
@@ -462,8 +507,8 @@ class BoardRenderComponent(Component):
 
         self._render_tiles_with_bg()
 
-    def update_render_position(self, position_component):
-        if position_component:
+    def update_render_position(self, board_items_component):
+        if board_items_component:
             sprite_idx = 0
             tile_idx = 0
             for layer in self._board_res.layers:
@@ -478,7 +523,7 @@ class BoardRenderComponent(Component):
                         break
                     x, y = self._get_tile_xy(tile_idx, layer.width, layer.height)
                     sprite = self._tiles_sprites[sprite_idx]
-                    sprite.position = position_component.get_render_position(x, y)
+                    sprite.position = board_items_component.get_render_position(x, y)
                     sprite_idx += 1
                     tile_idx += 1
         else:
@@ -607,18 +652,18 @@ import pyglet.image
 
 class GemsRenderComponent(Component):
 
+    _default_fall_speed = 2
+
+    fall_state = "fall_state"
+    swap_state = "swap_state"
+
     def __init__(self, sprite_sheet_res, type):
         super(GemsRenderComponent, self).__init__()
 
-        self._type = type
-
-        img = sprite_sheet_res.get_frame_image(type, 0)
-
         self._render_position = (0, 0)
 
+        img = sprite_sheet_res.get_frame_image(type, 0)
         self._sprite = Sprite(img)
-
-        self._state = State()
 
     def render(self):
         self._sprite.position = self._render_position
@@ -626,33 +671,139 @@ class GemsRenderComponent(Component):
 
     @property
     def render_position(self):
-        return self._sprite.position
+        return self._render_position
 
     @render_position.setter
     def render_position(self, pos):
         self._render_position = pos
 
 
-class GemsPositionComponent(Component):
+class GemsItemComponent(Component):
 
-    def __init__(self, board_pos_component, cell_x, cell_y):
-        super(GemsPositionComponent, self).__init__()
+    _gems_type = ["purple_quad",
+                  "silver_triangle",
+                  "black_quad",
+                  "green_hex",
+                  "purple_orb",
+                  "green_orb"]
 
-        self._cell_x = cell_x
-        self._cell_y = cell_y
+    _default_fall_speed = 2.0
 
-        self._board_pos_component = board_pos_component
+    idle_state = "idle_state"
+    fall_state = "fall_state"
+    swap_state = "swap_state"
 
-    def get_render_position(self):
-        return self._board_pos_component.get_render_position(self._cell_x, self._cell_y)
+    def __init__(self, gem_type, pos, board_items_component):
+        super(GemsItemComponent, self).__init__()
+
+        self._board_items_component = board_items_component
+
+        self._gem_type = gem_type
+        self._board_pos_x = pos[0]
+        self._board_pos_y = pos[1]
+
+        self._update_render_position()
+
+        self._state = State()
+
+        idle_state = State()
+        idle_state.assign({"id": self.idle_state,
+                           "enter_func": self._on_idle_enter,
+                           "process_func": self._on_idle_process,
+                           "exit_func": self._on_idle_exit})
+
+        fall_state = State()
+        fall_state.assign({"id": self.fall_state,
+                           "enter_func": self._on_fall_enter,
+                           "process_func": self._on_fall_process,
+                           "exit_func": self._on_fall_exit})
+        self._state.add_state(fall_state)
+
+        swap_state = State()
+        swap_state.assign({"id": self.swap_state,
+                           "enter_func": self._on_swap_enter,
+                           "process_func": self._on_swap_process,
+                           "exit_func": self._on_swap_exit})
+        self._state.add_state(swap_state)
+
+    def process(self):
+        self._state.process()
+
+    # Idle state handling functions
+    def _on_idle_enter(self, state):
+        pass
+
+    def _on_idle_process(self, state):
+        pass
+
+    def _on_idle_exit(self, state):
+        pass
+
+    # Falling state handling functions
+    def _on_fall_enter(self, state):
+        self._fall_speed = self._default_fall_speed
+        state.data["fall_distance"] = 0.0
+
+    def _on_fall_process(self, state):
+        if self._board_items_component.can_fall(self._board_pos_x, self._board_pos_y):
+            print "falling!"
+            self._fall(self._fall_speed)
+            state.data["fall_distance"] += self._fall_speed
+            self._fall_speed += 1.0
+
+            if state.data["fall_distance"] >= self._board_items_component.cell_height:
+                prev_pos = self._board_pos_x, self._board_pos_y
+                self._fall_to_cell_below()
+                cur_pos = self._board_pos_x, self._board_pos_y
+                self._board_items_component.update_gem_cell(self, prev_pos, cur_pos)
+                state.data["fall_distance"] = 0.0
+        else:
+            print "cannot fall!"
+            self._update_render_position()
+            self.state.exit()
+
+    def _on_fall_exit(self, state):
+        print "fall state exit()"
+
+    # Swapping state handling functions
+    def _on_swap_enter(self, state):
+        pass
+
+    def _on_swap_process(self, state):
+        pass
+
+    def _on_swap_exit(self, state):
+        pass
 
     @property
-    def cell_x(self):
-        return self._cell_x
+    def render_position(self):
+        return self._render_pos_x, self._render_pos_y
 
     @property
-    def cell_y(self):
-        return self._cell_y
+    def gem_type(self):
+        return self._gems_type
+
+    @property
+    def state(self):
+        return self._state
+
+    def _fall(self, units):
+
+        below_render_position = self._board_items_component.get_render_position(self._board_pos_x,
+                                                                                self._board_pos_y-1)
+
+        fall_units = min(self._render_pos_y-below_render_position[1], units)
+
+        self._render_pos_y -= fall_units
+
+    def _fall_to_cell_below(self):
+        self._board_pos_y -= 1
+
+    def _update_render_position(self):
+        render_pos = self._board_items_component.get_render_position(self._board_pos_x,
+                                                                     self._board_pos_y)
+        self._render_pos_x = render_pos[0]
+        self._render_pos_y = render_pos[1]
 
 
 class GemsSpawnComponent(Component):
@@ -664,13 +815,35 @@ class GemsSpawnComponent(Component):
                   "purple_orb",
                   "green_orb"]
 
-    def __init__(self, spawn_pos):
+    _num_gems_types = len(_gems_type)
+
+    def __init__(self, board_pos_component, board_items_component, spawn_pos):
         super(GemsSpawnComponent, self).__init__()
         self._spawn_pos = spawn_pos
-        self._num_gems_type = len(self._gems_type)
 
-    def _generate_new_gem_idx(self):
-        return random.randint(1, self._num_gems_type)
+        self._board_pos_component = board_pos_component
+        self._board_item_component = board_items_componnet
+
+    def spawn_gem(self, world, board_pos=None):
+        gem_entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
+
+        if board_pos is None:
+            spawn_pos = self._spawn_pos
+        else:
+            spawn_pos = board_pos
+
+        pos_component = GemsItemComponent(self._board_pos_component,
+                                              spawn_pos[0],
+                                              spawn_pos[1])
+        gem_entity.attach_component(pos_component)
+
+        gems_sprite_res = ResourceManagerSingleton.instance().find_resource("gems")
+        gem_type = self._gems_type[self.next_gem_type]
+        render_component = GemsRenderComponent(gems_sprite_res, gem_type, self._board_item_component)
+        gem_entity.attach_component(render_component)
+
+        if board_pos is None:
+            render_component.state.set_state(GemsRenderComponent.fall_state)
 
     @property
     def spawn_pos(self):
@@ -680,30 +853,8 @@ class GemsSpawnComponent(Component):
     def next_gem_type(self):
         return self._generate_new_gem_idx()
 
-
-class PhysicsComponent(Component):
-
-    def __init__(self, pos):
-        self._current_pos = pos
-        self._current_cell = None
-        self._collision_obj = None
-
-        self._state = State()
-
-        self._state.add_state(State().assign({"id": "falling_state",
-                                              "enter_func": self._on_falling_enter,
-                                              "process_func": self._on_falling_process,
-                                              "exit_func": self._on_falling_exit}))
-
-    def check_collision_cell(self, collision_obj):
-        return False
-
-    def update_collision_obj(self, render_pos, cell):
-        pass
-
-    @property
-    def collision_obj(self):
-        return self._collision_obj
+    def _generate_new_gem_idx(self):
+        return random.randint(1, self._num_gems_types)
 
 
 class EntityFactory(object):
@@ -741,28 +892,17 @@ class EntityFactory(object):
         entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
 
         board_layout_res = ResourceManagerSingleton.instance().find_resource(board_res_name)
-        board_width = board_layout_res.board_width
-        board_height = board_layout_res.board_height
-        tile_width = board_layout_res.tile_width
-        tile_height = board_layout_res.tile_height
 
-        pos_component = BoardTilePositionComponent(pos,
-                                                   tile_width,
-                                                   tile_height,
-                                                   board_width,
-                                                   board_height)
-        entity.attach_component(pos_component)
+        board_items_component = BoardItemsComponent(board_layout_res)
+        entity.attach_component(board_items_component)
 
         render_component = BoardRenderComponent(board_layout_res)
         entity.attach_component(render_component)
 
-        #items_component = BoardItemsComponent(board_layout_res)
-        #entity.attach_component(items_component)
-
         return entity
 
     @staticmethod
-    def create_spawn_pipe(world, spawn_pos):
+    def create_gems_spawner(world, spawn_pos):
         pass
 
     @staticmethod
@@ -771,18 +911,13 @@ class EntityFactory(object):
 
         gems_sprite_res = ResourceManagerSingleton.instance().find_resource("gems")
 
+        board_item_component = board_entity.get_component(BoardItemsComponent)
         render_component = GemsRenderComponent(gems_sprite_res, gem_type)
         entity.attach_component(render_component)
 
-        board_pos_component = board_entity.get_component(BoardTilePositionComponent)
-        pos_component = GemsPositionComponent(board_pos_component, pos[0], pos[1])
+        pos_component = GemsItemComponent(gem_type, pos, board_item_component)
+        pos_component.state.set_state(GemsItemComponent.fall_state, dict())
         entity.attach_component(pos_component)
 
-        #physics_component = PhysicsComponent(pos)
-        #entity.attach_component(physics_component)
 
         return entity
-
-
-
-

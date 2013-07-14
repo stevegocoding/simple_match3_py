@@ -5,12 +5,10 @@ from simple_match3.entity import EntitySystem
 from simple_match3.managers import EntityManager
 
 from entity_factory import BoardItemsComponent
-from entity_factory import BoardTilePositionComponent
 from entity_factory import BoardRenderComponent
 from entity_factory import GemsRenderComponent
-from entity_factory import GemsPositionComponent
+from entity_factory import GemsItemComponent
 from entity_factory import GemsSpawnComponent
-from entity_factory import PhysicsComponent
 from entity_factory import EntityFactory
 
 from simple_match3.game import app_root
@@ -19,7 +17,7 @@ from simple_match3.game import app_root
 class BoardRenderSystem(EntitySystem):
 
     def __init__(self):
-        EntitySystem.__init__(self, Aspect.create_aspect_for_all([BoardTilePositionComponent,
+        EntitySystem.__init__(self, Aspect.create_aspect_for_all([BoardItemsComponent,
                                                                   BoardRenderComponent]))
 
     def render(self):
@@ -27,9 +25,9 @@ class BoardRenderSystem(EntitySystem):
 
     def render_board(self, entity):
         render_component = entity.get_component(BoardRenderComponent)
-        position_component = entity.get_component(BoardTilePositionComponent)
+        items_component = entity.get_component(BoardItemsComponent)
 
-        render_component.update_render_position(position_component)
+        render_component.update_render_position(items_component)
         render_component.render()
 
 
@@ -47,7 +45,8 @@ class BoardItemsSystem(EntitySystem):
 class GemsRenderSystem(EntitySystem):
 
     def __init__(self):
-        EntitySystem.__init__(self, Aspect.create_aspect_for_all([GemsRenderComponent]))
+        EntitySystem.__init__(self, Aspect.create_aspect_for_all([GemsRenderComponent,
+                                                                  GemsItemComponent]))
 
     def render(self):
         for entity in self._active_entities:
@@ -55,12 +54,18 @@ class GemsRenderSystem(EntitySystem):
 
     def render_entity(self, entity):
         render_component = entity.get_component(GemsRenderComponent)
-        pos_component = entity.get_component(GemsPositionComponent)
+        pos_component = entity.get_component(GemsItemComponent)
 
-        render_pos = pos_component.get_render_position()
-
-        render_component.render_position = render_pos
+        render_component.render_position = pos_component.render_position
         render_component.render()
+
+    def process(self):
+        for entity in self._active_entities:
+            self.process_entity(entity)
+
+    def process_entity(self, entity):
+        item_component = entity.get_component(GemsItemComponent)
+        item_component.process()
 
 
 class GemsSpawnSystem(EntitySystem):
@@ -74,23 +79,7 @@ class GemsSpawnSystem(EntitySystem):
             spawn_pipes = event_args.pipes
             for i in spawn_pipes:
                 pipe = self._get_spawn_pipe(i)
-                self._spawn_gem(pipe)
-
-    def _spawn_gem(self, spawn_pipe):
-        spawn_pos = self._get_spawn_pos(spawn_pipe)
-        gem_type = self._get_spawn_type(spawn_pipe)
-        EntityFactory.create_gem(app_root.world, gem_type, spawn_pos)
-
-    def _get_spawn_pipe(self, idx):
-        return self._active_entities[idx]
-
-    def _get_spawn_pos(self, pipe):
-        spawn_component = pipe.get_component(GemsSpawnComponent)
-        return spawn_component.spawn_pos
-
-    def _get_spawn_type(self, pipe):
-        spawn_component = pipe.get_component(GemsSpawnComponent)
-        return spawn_component.next_gem_type
+                pipe.spawn_gem(app_root.world)
 
 
 class GemsPhysicsSystem(EntitySystem):
@@ -117,7 +106,7 @@ def init_game():
     board_entity = EntityFactory.create_game_board(world, "board_blocks_test_hole.json", (200, 70))
     world.add_entity(board_entity)
 
-    gem_entity = EntityFactory.create_gem(world, board_entity, "pink_hex", (3, 2))
+    gem_entity = EntityFactory.create_gem(world, board_entity, "pink_hex", (3, 9))
     world.add_entity(gem_entity)
 
 if __name__ == "__main__":

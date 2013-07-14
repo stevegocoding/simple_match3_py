@@ -24,7 +24,9 @@
          "properties":
             {
              "height":"10",
-             "width":"10"
+             "width":"10",
+             "origin_x":"200",
+             "origin_y":"70"
             },
          "type":"tilelayer",
          "visible":true,

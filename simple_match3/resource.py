@@ -251,20 +251,26 @@ class TiledBoardResource(Resource):
         return self._tileset_properties[name]
 
     @property
+    def board_origin(self):
+        origin_x = int(self._layer_properties["board_layer"]["origin_x"])
+        origin_y = int(self._layer_properties["board_layer"]["origin_y"])
+        return origin_x, origin_y
+
+    @property
     def board_width(self):
-        return self._layer_properties["board_layer"]["width"]
+        return int(self._layer_properties["board_layer"]["width"])
 
     @property
     def board_height(self):
-        return self._layer_properties["board_layer"]["height"]
+        return int(self._layer_properties["board_layer"]["height"])
 
     @property
     def tile_width(self):
-        return self._tilesets[0].tile_width
+        return int(self._tilesets[0].tile_width)
 
     @property
     def tile_height(self):
-        return self._tilesets[0].tile_height
+        return int(self._tilesets[0].tile_height)
 
     @property
     def layers(self):
