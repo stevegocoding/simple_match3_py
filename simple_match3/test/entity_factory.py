@@ -353,6 +353,14 @@ class BoardItemsComponent(Component):
     def cell_height(self):
         return self._cell_height
 
+    @property
+    def board_width(self):
+        return self._board_width
+
+    @property
+    def board_height(self):
+        return self._board_height
+
 
 class BoardRenderComponent(Component):
 
@@ -678,16 +686,18 @@ class GemsRenderComponent(Component):
         self._render_position = pos
 
 
+gems_types = ["purple_quad",
+              "silver_triangle",
+              "black_quad",
+              "green_hex",
+              "purple_orb",
+              "green_orb"]
+num_gems_type = len(gems_types)
+
+
 class GemsItemComponent(Component):
 
-    _gems_type = ["purple_quad",
-                  "silver_triangle",
-                  "black_quad",
-                  "green_hex",
-                  "purple_orb",
-                  "green_orb"]
-
-    _default_fall_speed = 2.0
+    _default_fall_speed = 1.3
 
     idle_state = "idle_state"
     fall_state = "fall_state"
@@ -711,6 +721,7 @@ class GemsItemComponent(Component):
                            "enter_func": self._on_idle_enter,
                            "process_func": self._on_idle_process,
                            "exit_func": self._on_idle_exit})
+        self._state.add_state(idle_state)
 
         fall_state = State()
         fall_state.assign({"id": self.fall_state,
@@ -731,10 +742,15 @@ class GemsItemComponent(Component):
 
     # Idle state handling functions
     def _on_idle_enter(self, state):
-        pass
+        if self._board_items_component.get_cell(self._board_pos_x, self._board_pos_y).gem_item is None:
+            self._board_items_component.get_cell(self._board_pos_x, self._board_pos_y).gem_item = self
+        else:
+            print "Error! There is already a gem item in this cell"
 
     def _on_idle_process(self, state):
-        pass
+        if self._board_items_component.can_fall(self._board_pos_x, self._board_pos_y):
+            self.state.set_state(self.fall_state, {"return_state": self.state.current_state,
+                                                   "fall_distance": 0.0})
 
     def _on_idle_exit(self, state):
         pass
@@ -780,10 +796,6 @@ class GemsItemComponent(Component):
         return self._render_pos_x, self._render_pos_y
 
     @property
-    def gem_type(self):
-        return self._gems_type
-
-    @property
     def state(self):
         return self._state
 
@@ -808,53 +820,32 @@ class GemsItemComponent(Component):
 
 class GemsSpawnComponent(Component):
 
-    _gems_type = ["purple_quad",
-                  "silver_triangle,"
-                  "black_quad",
-                  "green_hex,"
-                  "purple_orb",
-                  "green_orb"]
-
-    _num_gems_types = len(_gems_type)
-
-    def __init__(self, board_pos_component, board_items_component, spawn_pos):
+    def __init__(self):
         super(GemsSpawnComponent, self).__init__()
-        self._spawn_pos = spawn_pos
 
-        self._board_pos_component = board_pos_component
-        self._board_item_component = board_items_componnet
-
-    def spawn_gem(self, world, board_pos=None):
+    def spawn_gem(self, world, board_pos):
         gem_entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
 
-        if board_pos is None:
-            spawn_pos = self._spawn_pos
-        else:
-            spawn_pos = board_pos
+        idx = self.next_gem_type
+        gem_type = gems_types[idx]
 
-        pos_component = GemsItemComponent(self._board_pos_component,
-                                              spawn_pos[0],
-                                              spawn_pos[1])
-        gem_entity.attach_component(pos_component)
+        board_items_component = self.owner.get_component(BoardItemsComponent)
+        gem_item_component = GemsItemComponent(gem_type, board_pos, board_items_component)
+        gem_item_component.state.set_state(GemsItemComponent.idle_state)
+        gem_entity.attach_component(gem_item_component)
 
         gems_sprite_res = ResourceManagerSingleton.instance().find_resource("gems")
-        gem_type = self._gems_type[self.next_gem_type]
-        render_component = GemsRenderComponent(gems_sprite_res, gem_type, self._board_item_component)
+        render_component = GemsRenderComponent(gems_sprite_res, gem_type)
         gem_entity.attach_component(render_component)
 
-        if board_pos is None:
-            render_component.state.set_state(GemsRenderComponent.fall_state)
-
-    @property
-    def spawn_pos(self):
-        return self._spawn_pos
+        world.add_entity(gem_entity)
 
     @property
     def next_gem_type(self):
         return self._generate_new_gem_idx()
 
     def _generate_new_gem_idx(self):
-        return random.randint(1, self._num_gems_types)
+        return random.randint(0, num_gems_type-1)
 
 
 class EntityFactory(object):
@@ -899,11 +890,19 @@ class EntityFactory(object):
         render_component = BoardRenderComponent(board_layout_res)
         entity.attach_component(render_component)
 
+        spawn_component = GemsSpawnComponent()
+        entity.attach_component(spawn_component)
+
         return entity
 
     @staticmethod
-    def create_gems_spawner(world, spawn_pos):
-        pass
+    def create_gems_spawner(world):
+        entity = EntityRecord(world, world.get_manager_by_type(EntityManager).generate_id())
+
+        spawn_component = GemsSpawnComponent()
+        entity.attach_component(spawn_component)
+
+        return entity
 
     @staticmethod
     def create_gem(world, board_entity, gem_type, pos):

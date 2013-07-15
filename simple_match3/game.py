@@ -15,7 +15,7 @@ from utils import FPSSync
 
 class EntitySystemNode(cocosnode.CocosNode):
 
-    def __init__(self, entity_system):
+    def __init__(self, entity_system, name="default"):
         super(EntitySystemNode, self).__init__()
         self._entity_system = entity_system
 
@@ -32,7 +32,7 @@ class EntitySystemNode(cocosnode.CocosNode):
 
     @property
     def name(self):
-        return "default"
+        return self._entity_system.name
 
 
 class GameScene(scene.Scene):

@@ -297,6 +297,8 @@ class EntitySystem(EntityEventListener):
 
         self._active_entities = []
 
+        self._dummy = len(self._all) == 0
+
     def begin(self):
         """
         Called before processing of entities begins.
@@ -367,6 +369,10 @@ class EntitySystem(EntityEventListener):
         """
         Will check if the entity is of interest to this system.
         """
+
+        if self._dummy:
+            return
+
         system_cls = type(self)
         contains = system_cls in entity_rec.get_systems_classes_set()
         interested = True
@@ -384,3 +390,7 @@ class EntitySystem(EntityEventListener):
             self.insert_entity(entity_rec)
         elif not interested and contains:
             self.remove_entity(entity_rec)
+
+    @property
+    def name(self):
+        return self.__class__.__name__

@@ -29,7 +29,7 @@ class State(object):
         state.parent = self
         self.children[state.id] = state
 
-    def set_state(self, id, data):
+    def set_state(self, id, data=dict()):
         self.set_state_ex(id, data, False)
 
     def set_state_ex(self, id, data, is_return):
@@ -43,8 +43,9 @@ class State(object):
 
         if is_return:
             data = new_state.data
-        elif data is None:
-            data = {}
+        else:
+            if data is None:
+                data = {}
             new_state.data = data
 
         if self.current_state is not None:
@@ -56,7 +57,7 @@ class State(object):
 
         if not is_return:
             if data is not None and data.get("return_state", None) is not None:
-                self.current_state.return_state = self.children[data.return_state]
+                self.current_state.return_state = self.children[data["return_state"].id]
             else:
                 self.current_state.return_state = None
 

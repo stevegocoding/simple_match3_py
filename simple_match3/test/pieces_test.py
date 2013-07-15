@@ -3,6 +3,7 @@ from simple_match3.resource import GameAssetArchiveLoader
 from simple_match3.entity import Aspect
 from simple_match3.entity import EntitySystem
 from simple_match3.managers import EntityManager
+from simple_match3.utils import State
 
 from entity_factory import BoardItemsComponent
 from entity_factory import BoardRenderComponent
@@ -18,9 +19,12 @@ class BoardRenderSystem(EntitySystem):
 
     def __init__(self):
         EntitySystem.__init__(self, Aspect.create_aspect_for_all([BoardItemsComponent,
-                                                                  BoardRenderComponent]))
+                                                                  BoardRenderComponent,
+                                                                  GemsSpawnComponent]))
 
     def render(self):
+        if len(self._active_entities) == 0:
+            return
         self.render_board(self._active_entities[0])
 
     def render_board(self, entity):
@@ -29,6 +33,23 @@ class BoardRenderSystem(EntitySystem):
 
         render_component.update_render_position(items_component)
         render_component.render()
+
+    def spawn_gem(self, pos):
+        if len(self._active_entities) == 0:
+            return
+        spawner_entity = self._active_entities[0]
+        spawn_component = spawner_entity.get_component(GemsSpawnComponent)
+        spawn_component.spawn_gem(app_root.world, pos)
+
+    @property
+    def board_width(self):
+        items_component = self._active_entities[0].get_component(BoardItemsComponent)
+        return items_component.board_width
+
+    @property
+    def board_height(self):
+        items_component = self._active_entities[0].get_component(BoardItemsComponent)
+        return items_component.board_height
 
 
 class BoardItemsSystem(EntitySystem):
@@ -68,30 +89,55 @@ class GemsRenderSystem(EntitySystem):
         item_component.process()
 
 
-class GemsSpawnSystem(EntitySystem):
+class GameStateSystem(EntitySystem):
+
+    init_game_state = "init_game"
+    fill_board_state = "fill_board"
+
+    # State data keys
+    total_gems_key = "total_gems"
+    spawn_gems_key = "spawn_gems"
+    last_spawn_tick_key = "last_spawn_tick"
 
     def __init__(self):
-        super(GemsSpawnSystem, self).__init__(
-            Aspect.create_aspect_for_all([GemsSpawnComponent]))
+        super(GameStateSystem, self).__init__(Aspect.create_aspect_for_all([]))
+        self._state = State()
 
-    def on_event(self, event_args):
-        if event_args.event_type == "spawn_event":
-            spawn_pipes = event_args.pipes
-            for i in spawn_pipes:
-                pipe = self._get_spawn_pipe(i)
-                pipe.spawn_gem(app_root.world)
+        fill_board_state = State()
+        fill_board_state.assign({"id": self.fill_board_state,
+                                 "enter_func": self._on_fill_board_enter,
+                                 "process_func": self._on_fill_board_process,
+                                 "exit_func": self._on_fill_board_exit})
+        self.state.add_state(fill_board_state)
 
+    def _on_fill_board_enter(self, state):
+        pass
 
-class GemsPhysicsSystem(EntitySystem):
+    def _on_fill_board_process(self, state):
 
-    def __init__(self):
-        super(GemsPhysicsSystem, self).__init__(Aspect.create_aspect_for_all([GemsRenderComponent,
-                                                                              PhysicsComponent]))
+        if state.tick - state.data[self.last_spawn_tick_key] >= 5:
+            total_gems = state.data[self.total_gems_key]
+            spawn_gems = state.data[self.spawn_gems_key]
 
-    def process_entities(self, entities):
-        for entity in entities:
-            physics_component = entity.get_component(PhysicsComponent)
-            physics_component.update_gem_pos()
+            board_render_system = app_root.world.get_system_by_type(BoardRenderSystem)
+
+            if spawn_gems < total_gems:
+                for i in range(board_render_system.board_width):
+                    pos = i, board_render_system.board_height-1
+                    board_render_system.spawn_gem(pos)
+                    state.data[self.spawn_gems_key] += 1
+
+                state.data[self.last_spawn_tick_key] = state.tick
+
+    def _on_fill_board_exit(self, state):
+        pass
+
+    def process(self):
+        self._state.process()
+
+    @property
+    def state(self):
+        return self._state
 
 
 def init_game():
@@ -101,13 +147,18 @@ def init_game():
     world = app_root.world
     world.add_system(BoardRenderSystem(), layer_name="BOARD_LAYER")
     world.add_system(GemsRenderSystem(), layer_name="PIECE_LAYER")
+    world.add_system(GameStateSystem(), layer_name="BACKGROUND_LAYER")
+
     world.add_manager(EntityManager())
 
     board_entity = EntityFactory.create_game_board(world, "board_blocks_test_hole.json", (200, 70))
     world.add_entity(board_entity)
 
-    gem_entity = EntityFactory.create_gem(world, board_entity, "pink_hex", (3, 9))
-    world.add_entity(gem_entity)
+    #gem_entity = EntityFactory.create_gem(world, board_entity, "pink_hex", (3, 9))
+    #world.add_entity(gem_entity)
+
+    world.get_system_by_type(GameStateSystem).state.set_state(GameStateSystem.fill_board_state,{"total_gems": 100,"spawn_gems": 0,"last_spawn_tick": 0})
+
 
 if __name__ == "__main__":
 
